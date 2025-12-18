@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:moneyrol/constants/app_constants.dart';
 import 'package:moneyrol/dashboard/model/company_transation_model.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_company_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_company_transation_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_transation_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/currency_seletion_dialog.dart';
-import 'package:moneyrol/theme/app_theme.dart';
 import '../controller/dashboard_controller.dart';
-import '../../constants/app_constants.dart';
 import 'history_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -16,286 +15,271 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() {
-      // Get complete theme data
-      final appTheme = AppThemes.getTheme(controller.currentTheme.value);
-      final themeData = appTheme.themeData;
-
-      return Theme(
-        data: themeData,
-        child: Scaffold(
-          backgroundColor: appTheme.scaffoldBackground,
-          appBar: AppBar(
-            backgroundColor: appTheme.primary,
-            title: Text(
-              'MoneyRoll',
-              style: TextStyle(color: themeData.appBarTheme.foregroundColor),
-            ),
-            actions: [
-              IconButton(
-                icon: Container(
-                  padding: EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    controller.currencySymbol,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => CurrencySelectionDialog(),
-                  );
-                },
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.history,
-                  color: themeData.appBarTheme.foregroundColor,
-                ),
-                onPressed: () => Get.to(() => HistoryScreen()),
-              ),
-              PopupMenuButton(
-                icon: Icon(
-                  Icons.more_vert,
-                  color: themeData.appBarTheme.foregroundColor,
-                ),
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    child: ListTile(
-                      leading: Icon(Icons.save_alt, color: Colors.blue),
-                      title: Text('Export Data'),
-                    ),
-                    value: 'export',
-                  ),
-                  PopupMenuItem(
-                    child: ListTile(
-                      leading: Icon(Icons.folder_open, color: Colors.green),
-                      title: Text('Import Data'),
-                    ),
-                    value: 'import',
-                  ),
-                  PopupMenuItem(
-                    child: ListTile(
-                      leading: Icon(
-                        Icons.currency_exchange,
-                        color: Colors.amber,
-                      ),
-                      title: Text('Change Currency'),
-                    ),
-                    value: 'currency',
-                  ),
-                  PopupMenuItem(
-                    value: 'theme',
-                    child: ListTile(
-                      leading: Icon(Icons.palette),
-                      title: Text('Change Theme'),
-                    ),
-                  ),
-                ],
-                onSelected: (value) {
-                  if (value == 'export')
-                    controller.exportData();
-                  else if (value == 'import')
-                    controller.importData();
-                  else if (value == 'currency')
-                    showDialog(
-                      context: context,
-                      builder: (_) => CurrencySelectionDialog(),
-                    );
-                  else if (value == 'theme')
-                    showThemeSelector();
-                },
-              ),
-            ],
-          ),
-          body: SingleChildScrollView(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTotalAmountCard(appTheme),
-                  SizedBox(height: 20),
-                  _buildQuickStats(appTheme),
-                  SizedBox(height: 20),
-                  _buildRecentTransactions(appTheme),
-                ],
-              ),
-            ),
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: _showAddOptions,
-            icon: Icon(Icons.add, color: Colors.white),
-            label: Text('Add', style: TextStyle(color: Colors.white)),
-            backgroundColor: appTheme.primary,
+    return Scaffold(
+      backgroundColor: AppConstants.backgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 1,
+        title: Text(
+          'MoneyRoll',
+          style: TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.w700,
+            fontSize: 20,
           ),
         ),
-      );
-    });
-  }
-
-  Widget _buildTotalAmountCard(AppThemeData appTheme) {
-    return Obx(() {
-      return Card(
-        color: appTheme.cardBackground,
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        iconTheme: const IconThemeData(color: Colors.black),
+        actions: [
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            child: IconButton(
+              icon: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Obx(
+                  () => Text(
+                    controller.currencySymbol,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+              ),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => CurrencySelectionDialog(),
+                );
+              },
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.history, color: Colors.grey.shade700),
+            onPressed: () => Get.to(() => HistoryScreen()),
+          ),
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, color: Colors.grey.shade700),
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'export',
+                child: ListTile(
+                  leading: Icon(Icons.save_alt, color: Colors.grey.shade700),
+                  title: Text('Export Data'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'import',
+                child: ListTile(
+                  leading: Icon(Icons.folder_open, color: Colors.grey.shade700),
+                  title: Text('Import Data'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'currency',
+                child: ListTile(
+                  leading: Icon(
+                    Icons.currency_exchange,
+                    color: Colors.grey.shade700,
+                  ),
+                  title: Text('Change Currency'),
+                ),
+              ),
+            ],
+            onSelected: (value) {
+              if (value == 'export')
+                controller.exportData();
+              else if (value == 'import')
+                controller.importData();
+              else if (value == 'currency') {
+                showDialog(
+                  context: context,
+                  builder: (_) => CurrencySelectionDialog(),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Total Amount',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: appTheme.themeData.brightness == Brightness.dark
-                          ? Colors.grey[300]
-                          : Colors.grey[800],
-                    ),
+              _buildTotalAmountCard(),
+              const SizedBox(height: 20),
+              _buildQuickStats(),
+              const SizedBox(height: 20),
+              _buildRecentTransactions(),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showAddOptions,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Add', style: TextStyle(color: Colors.white)),
+        backgroundColor: AppConstants.primaryColor,
+        elevation: 2,
+      ),
+    );
+  }
+
+  Widget _buildTotalAmountCard() {
+    return Obx(() {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppConstants.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppConstants.borderColor),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.shade200,
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Total Amount',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: AppConstants.textSecondary,
+                    fontWeight: FontWeight.w600,
                   ),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: appTheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: appTheme.primary.withOpacity(0.3),
-                      ),
-                    ),
-                    child: Row(
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Obx(
+                    () => Row(
                       children: [
                         Text(
                           controller.currencySymbol,
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: appTheme.primary,
+                            fontWeight: FontWeight.w700,
+                            color: AppConstants.primaryColor,
                           ),
                         ),
-                        SizedBox(width: 4),
+                        const SizedBox(width: 4),
                         Text(
                           controller.selectedCurrency.value.code,
                           style: TextStyle(
                             fontSize: 12,
-                            color: appTheme.primary,
+                            color: AppConstants.textSecondary,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
-              SizedBox(height: 8),
-              Text(
-                '${controller.currencySymbol}${controller.totalAmount.value.toStringAsFixed(2)}',
-                style: TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                  color: controller.totalAmount.value >= 0
-                      ? appTheme.income
-                      : appTheme.expense,
                 ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${controller.currencySymbol}${controller.totalAmount.value.toStringAsFixed(2)}',
+              style: TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.w800,
+                color: controller.totalAmount.value >= 0
+                    ? AppConstants.incomeColor
+                    : AppConstants.expenseColor,
               ),
-              SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatItem(
-                      'Normal',
-                      controller.getNormalTransactions().length,
-                      appTheme.primary,
-                      appTheme.iconBackground,
-                      appTheme.themeData.brightness,
-                    ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatItem(
+                    'Normal',
+                    controller.getNormalTransactions().length,
+                    Icons.attach_money,
                   ),
-                  Expanded(
-                    child: _buildStatItem(
-                      'Received',
-                      controller.getReceivedCompanyTransactions().length,
-                      appTheme.income,
-                      appTheme.iconBackground,
-                      appTheme.themeData.brightness,
-                    ),
+                ),
+                Expanded(
+                  child: _buildStatItem(
+                    'Received',
+                    controller.getReceivedCompanyTransactions().length,
+                    Icons.download,
                   ),
-                  Expanded(
-                    child: _buildStatItem(
-                      'Sent',
-                      controller.getSentCompanyTransactions().length,
-                      appTheme.expense,
-                      appTheme.iconBackground,
-                      appTheme.themeData.brightness,
-                    ),
+                ),
+                Expanded(
+                  child: _buildStatItem(
+                    'Sent',
+                    controller.getSentCompanyTransactions().length,
+                    Icons.upload,
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+          ],
         ),
       );
     });
   }
 
-  Widget _buildStatItem(
-    String title,
-    int count,
-    Color color,
-    Color iconBackground,
-    Brightness brightness,
-  ) {
+  Widget _buildStatItem(String title, int count, IconData icon) {
+    final iconColor = title == 'Normal'
+        ? Colors.blue.shade600
+        : title == 'Received'
+        ? AppConstants.incomeColor
+        : AppConstants.expenseColor;
+
     return Column(
       children: [
         Container(
-          padding: EdgeInsets.all(8),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: iconBackground,
+            color: iconColor.withOpacity(0.1),
             shape: BoxShape.circle,
+            border: Border.all(color: iconColor.withOpacity(0.3)),
           ),
-          child: Icon(_getIconForType(title), color: color, size: 20),
+          child: Icon(icon, color: iconColor, size: 20),
         ),
-        SizedBox(height: 4),
+        const SizedBox(height: 8),
         Text(
           title,
           style: TextStyle(
             fontSize: 12,
-            color: brightness == Brightness.dark
-                ? Colors.grey[400]
-                : Colors.grey[600],
+            color: AppConstants.textSecondary,
+            fontWeight: FontWeight.w500,
           ),
         ),
+        const SizedBox(height: 4),
         Text(
           count.toString(),
           style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: color,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: iconColor,
           ),
         ),
       ],
     );
   }
 
-  IconData _getIconForType(String type) {
-    switch (type) {
-      case 'Normal':
-        return Icons.attach_money;
-      case 'Received':
-        return Icons.download;
-      case 'Sent':
-        return Icons.upload;
-      default:
-        return Icons.money;
-    }
-  }
-
-  Widget _buildQuickStats(AppThemeData appTheme) {
+  Widget _buildQuickStats() {
     return Obx(() {
       return Row(
         children: [
@@ -303,19 +287,17 @@ class DashboardScreen extends StatelessWidget {
             child: _buildStatCard(
               'From Partners',
               '${controller.currencySymbol}${controller.getTotalReceivedFromCompanies().toStringAsFixed(2)}',
-              appTheme.income,
+              AppConstants.incomeColor,
               Icons.arrow_downward,
-              appTheme,
             ),
           ),
-          SizedBox(width: Get.width * .01),
+          const SizedBox(width: 12),
           Expanded(
             child: _buildStatCard(
               'To Partners',
               '${controller.currencySymbol}${controller.getTotalSentToCompanies().toStringAsFixed(2)}',
-              appTheme.expense,
+              AppConstants.expenseColor,
               Icons.arrow_upward,
-              appTheme,
             ),
           ),
         ],
@@ -328,55 +310,55 @@ class DashboardScreen extends StatelessWidget {
     String value,
     Color color,
     IconData icon,
-    AppThemeData appTheme,
   ) {
-    return Card(
-      color: appTheme.cardBackground,
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, color: color, size: 20),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppConstants.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppConstants.borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: appTheme.themeData.brightness == Brightness.dark
-                          ? Colors.grey[300]
-                          : Colors.grey[800],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: color,
+                child: Icon(icon, color: color, size: 20),
               ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppConstants.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: color,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildRecentTransactions(AppThemeData appTheme) {
+  Widget _buildRecentTransactions() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -387,22 +369,23 @@ class DashboardScreen extends StatelessWidget {
               'Recent Transactions',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: appTheme.themeData.brightness == Brightness.dark
-                    ? Colors.grey[300]
-                    : Colors.grey[800],
+                fontWeight: FontWeight.w700,
+                color: AppConstants.textPrimary,
               ),
             ),
             TextButton(
               onPressed: () => Get.to(() => HistoryScreen()),
               child: Text(
                 'View All',
-                style: TextStyle(color: appTheme.primary),
+                style: TextStyle(
+                  color: AppConstants.primaryColor,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
         ),
-        SizedBox(height: 8),
+        const SizedBox(height: 12),
         Obx(() {
           final List<TransactionItem> allTransactions = [];
 
@@ -435,60 +418,101 @@ class DashboardScreen extends StatelessWidget {
           allTransactions.sort((a, b) => b.date.compareTo(a.date));
           final recentTransactions = allTransactions.take(10).toList();
 
+          if (recentTransactions.isEmpty) {
+            return Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: AppConstants.cardColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppConstants.borderColor),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.receipt_long,
+                    size: 48,
+                    color: Colors.grey.shade400,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No transactions yet',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: AppConstants.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Add your first transaction to get started',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+                  ),
+                ],
+              ),
+            );
+          }
+
           return ListView.builder(
             shrinkWrap: true,
-            physics: NeverScrollableScrollPhysics(),
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: recentTransactions.length,
             itemBuilder: (context, index) {
               final item = recentTransactions[index];
-              return Card(
-                color: appTheme.cardBackground,
-                margin: EdgeInsets.only(bottom: 8),
+              final amountColor = item.isPositive
+                  ? AppConstants.incomeColor
+                  : AppConstants.expenseColor;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: AppConstants.cardColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppConstants.borderColor),
+                ),
                 child: ListTile(
                   leading: Container(
-                    padding: EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: item.isPositive
-                          ? appTheme.income.withOpacity(0.1)
-                          : appTheme.expense.withOpacity(0.1),
+                      color: amountColor.withOpacity(0.1),
                       shape: BoxShape.circle,
+                      border: Border.all(color: amountColor.withOpacity(0.3)),
                     ),
                     child: Icon(
                       item.isPositive ? Icons.download : Icons.upload,
-                      color: item.isPositive
-                          ? appTheme.income
-                          : appTheme.expense,
+                      color: amountColor,
+                      size: 20,
                     ),
                   ),
                   title: Text(
                     item.title,
                     style: TextStyle(
-                      color: appTheme.themeData.brightness == Brightness.dark
-                          ? Colors.grey[300]
-                          : Colors.grey[800],
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppConstants.textPrimary,
                     ),
                   ),
                   subtitle: Text(
                     '${item.type} • ${item.subtitle}',
                     style: TextStyle(
-                      color: appTheme.themeData.brightness == Brightness.dark
-                          ? Colors.grey[400]
-                          : Colors.grey[600],
+                      fontSize: 14,
+                      color: AppConstants.textSecondary,
                     ),
                   ),
                   trailing: SizedBox(
-                    width: Get.width * .35,
+                    width: 110,
                     child: Text(
                       textAlign: TextAlign.end,
                       '${item.isPositive ? '+' : '-'}${controller.currencySymbol}${item.amount.toStringAsFixed(2)}',
                       style: TextStyle(
-                        color: item.isPositive
-                            ? appTheme.income
-                            : appTheme.expense,
-                        fontWeight: FontWeight.bold,
+                        color: amountColor,
+                        fontWeight: FontWeight.w700,
                         fontSize: 16,
                       ),
                     ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
                   ),
                 ),
               );
@@ -500,12 +524,10 @@ class DashboardScreen extends StatelessWidget {
   }
 
   void _showAddOptions() {
-    final appTheme = AppThemes.getTheme(controller.currentTheme.value);
-
     showModalBottomSheet(
       context: Get.context!,
-      backgroundColor: appTheme.cardBackground,
-      shape: RoundedRectangleBorder(
+      backgroundColor: AppConstants.cardColor,
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) {
@@ -513,12 +535,13 @@ class DashboardScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Add a header with current currency
+              // Header
               Container(
-                padding: EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: appTheme.primary.withOpacity(0.05),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                  border: Border(
+                    bottom: BorderSide(color: AppConstants.borderColor),
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -526,32 +549,28 @@ class DashboardScreen extends StatelessWidget {
                     Text(
                       'Add New Transaction',
                       style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: appTheme.themeData.brightness == Brightness.dark
-                            ? Colors.grey[300]
-                            : Colors.grey[800],
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppConstants.textPrimary,
                       ),
                     ),
                     Obx(
                       () => Container(
-                        padding: EdgeInsets.symmetric(
+                        padding: const EdgeInsets.symmetric(
                           horizontal: 12,
-                          vertical: 4,
+                          vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: appTheme.primary.withOpacity(0.1),
+                          color: Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: appTheme.primary.withOpacity(0.3),
-                          ),
+                          border: Border.all(color: Colors.grey.shade300),
                         ),
                         child: Text(
                           controller.currencySymbol,
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: appTheme.primary,
+                            fontWeight: FontWeight.w700,
+                            color: AppConstants.primaryColor,
                           ),
                         ),
                       ),
@@ -560,8 +579,21 @@ class DashboardScreen extends StatelessWidget {
                 ),
               ),
               ListTile(
-                leading: Icon(Icons.attach_money, color: appTheme.primary),
-                title: Text('Add Normal Amount'),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade600.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.attach_money, color: Colors.blue.shade600),
+                ),
+                title: Text(
+                  'Add Normal Amount',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppConstants.textPrimary,
+                  ),
+                ),
                 subtitle: Text('Add money received (not from Partners)'),
                 onTap: () {
                   Get.back();
@@ -572,8 +604,21 @@ class DashboardScreen extends StatelessWidget {
                 },
               ),
               ListTile(
-                leading: Icon(Icons.business, color: appTheme.income),
-                title: Text('Add Partners'),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.shade600.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.business, color: Colors.purple.shade600),
+                ),
+                title: Text(
+                  'Add Partners',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppConstants.textPrimary,
+                  ),
+                ),
                 subtitle: Text('Add new Partners'),
                 onTap: () {
                   Get.back();
@@ -584,8 +629,21 @@ class DashboardScreen extends StatelessWidget {
                 },
               ),
               ListTile(
-                leading: Icon(Icons.download, color: appTheme.income),
-                title: Text('Received from Partners'),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppConstants.incomeColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.download, color: AppConstants.incomeColor),
+                ),
+                title: Text(
+                  'Received from Partners',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppConstants.textPrimary,
+                  ),
+                ),
                 subtitle: Text('Add money received from a Partner'),
                 onTap: () {
                   Get.back();
@@ -598,8 +656,21 @@ class DashboardScreen extends StatelessWidget {
                 },
               ),
               ListTile(
-                leading: Icon(Icons.upload, color: appTheme.expense),
-                title: Text('Sent to Partners'),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppConstants.expenseColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.upload, color: AppConstants.expenseColor),
+                ),
+                title: Text(
+                  'Sent to Partners',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppConstants.textPrimary,
+                  ),
+                ),
                 subtitle: Text('Add money sent to a Partner'),
                 onTap: () {
                   Get.back();
@@ -610,12 +681,27 @@ class DashboardScreen extends StatelessWidget {
                   );
                 },
               ),
-              // Option to change currency from bottom sheet
-              Divider(),
+              const Divider(height: 20),
               ListTile(
-                leading: Icon(Icons.currency_exchange, color: Colors.amber),
-                title: Text('Change Currency'),
-                subtitle: Text('Select different currency symbol'),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.currency_exchange,
+                    color: Colors.amber,
+                  ),
+                ),
+                title: Text(
+                  'Change Currency',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppConstants.textPrimary,
+                  ),
+                ),
+                subtitle: const Text('Select different currency symbol'),
                 onTap: () {
                   Get.back();
                   showDialog(
@@ -624,6 +710,7 @@ class DashboardScreen extends StatelessWidget {
                   );
                 },
               ),
+              const SizedBox(height: 8),
             ],
           ),
         );
@@ -649,82 +736,4 @@ class TransactionItem {
     required this.isPositive,
     required this.date,
   });
-}
-
-void showThemeSelector() {
-  final controller = Get.find<DashboardController>();
-  final currentTheme = AppThemes.getTheme(controller.currentTheme.value);
-
-  Get.bottomSheet(
-    Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: currentTheme.cardBackground,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _themeTile(
-            'Blue Theme',
-            Icons.water_drop,
-            Colors.blue,
-            () => controller.changeTheme(AppThemeType.blue),
-          ),
-          _themeTile(
-            'Dark Theme',
-            Icons.dark_mode,
-            Colors.grey[800]!,
-            () => controller.changeTheme(AppThemeType.dark),
-          ),
-          _themeTile(
-            'Green Theme',
-            Icons.eco,
-            Colors.green,
-            () => controller.changeTheme(AppThemeType.green),
-          ),
-          _themeTile(
-            'Orange Theme',
-            Icons.wb_sunny,
-            Colors.orange,
-            () => controller.changeTheme(AppThemeType.orange),
-          ),
-          _themeTile(
-            'Red Theme',
-            Icons.whatshot,
-            Colors.red,
-            () => controller.changeTheme(AppThemeType.red),
-          ),
-          _themeTile(
-            'Purple Theme',
-            Icons.brightness_5,
-            Colors.purple,
-            () => controller.changeTheme(AppThemeType.purple),
-          ),
-          _themeTile(
-            'White Theme',
-            Icons.light_mode,
-            Colors.grey[300]!,
-            () => controller.changeTheme(AppThemeType.white),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-Widget _themeTile(
-  String title,
-  IconData icon,
-  Color iconColor,
-  VoidCallback onTap,
-) {
-  return ListTile(
-    leading: Icon(icon, color: iconColor),
-    title: Text(title),
-    onTap: () {
-      onTap();
-      Get.back();
-    },
-  );
 }

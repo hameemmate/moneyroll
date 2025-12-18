@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:moneyrol/constants/app_constants.dart';
 import '../../controller/dashboard_controller.dart';
 
 class AddTransactionDialog extends StatefulWidget {
@@ -17,135 +18,613 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   TextEditingController sourceController = TextEditingController();
   TextEditingController referenceController = TextEditingController();
   DateTime selectedDate = DateTime.now();
+  TimeOfDay selectedTime = TimeOfDay.now();
   bool isCash = true;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      title: Text('Add Normal Amount'),
-      content: SizedBox(
-        width: Get.width,
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: amountController,
-                  decoration: InputDecoration(
-                    labelText: 'Amount',
-                    prefixText: controller.selectedCurrency.value.symbol,
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.numberWithOptions(decimal: true),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter amount';
-                    }
-                    if (double.tryParse(value) == null) {
-                      return 'Please enter valid amount';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: 16),
-                TextFormField(
-                  controller: descriptionController,
-                  decoration: InputDecoration(
-                    labelText: 'Description (Optional)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                SizedBox(height: 16),
-                TextFormField(
-                  controller: sourceController,
-                  decoration: InputDecoration(
-                    labelText: 'Source (Optional)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                SizedBox(height: 16),
-                InkWell(
-                  onTap: () async {
-                    final date = await showDatePicker(
-                      context: context,
-                      initialDate: selectedDate,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime.now(),
-                    );
-                    if (date != null) {
-                      setState(() {
-                        selectedDate = date;
-                      });
-                    }
-                  },
-                  child: InputDecorator(
-                    decoration: InputDecoration(
-                      labelText: 'Date',
-                      border: OutlineInputBorder(),
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: AppConstants.backgroundColor,
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade600.withOpacity(0.1),
+                      shape: BoxShape.circle,
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Icon(
+                      Icons.attach_money_rounded,
+                      color: Colors.blue.shade600,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(DateFormat('dd/MM/yyyy').format(selectedDate)),
-                        Icon(Icons.calendar_today),
+                        Text(
+                          'Add Normal Amount',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: AppConstants.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Obx(
+                          () => Text(
+                            'Currency: ${controller.currencySymbol}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: AppConstants.textSecondary,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: AppConstants.textSecondary),
+                    onPressed: () => Get.back(),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    // Amount
+                    _buildAmountField(),
+                    const SizedBox(height: 16),
+
+                    // Date and Time
+                    Row(
+                      children: [
+                        Expanded(child: _buildDateField()),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildTimeField()),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Description
+                    _buildTextField(
+                      controller: descriptionController,
+                      label: 'Description',
+                      hint: 'What is this for? (optional)',
+                      icon: Icons.description_rounded,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Source
+                    _buildTextField(
+                      controller: sourceController,
+                      label: 'Source',
+                      hint: 'Where did it come from? (optional)',
+                      icon: Icons.source_rounded,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Payment Type
+                    _buildPaymentTypeSection(),
+                    const SizedBox(height: 16),
+
+                    // Reference Number (if not cash)
+                    if (!isCash) _buildReferenceField(),
+                  ],
                 ),
-                SizedBox(height: 16),
-                SwitchListTile(
-                  title: Text('Cash Transaction'),
-                  value: isCash,
-                  onChanged: (value) {
-                    setState(() {
-                      isCash = value;
-                    });
-                  },
-                ),
-                if (!isCash) ...[
-                  SizedBox(height: 16),
-                  TextFormField(
-                    controller: referenceController,
-                    decoration: InputDecoration(
-                      labelText: 'Reference/Cheque Number',
-                      border: OutlineInputBorder(),
+              ),
+              const SizedBox(height: 32),
+
+              // Action Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Get.back(),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        side: BorderSide(color: AppConstants.borderColor),
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppConstants.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _addTransaction,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade600,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        'Add Amount',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAmountField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Amount',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppConstants.textPrimary,
+              ),
+            ),
+            Text(
+              ' *',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppConstants.errorColor,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppConstants.borderColor),
+          ),
+          child: TextFormField(
+            controller: amountController,
+            keyboardType: TextInputType.numberWithOptions(decimal: true),
+            style: TextStyle(fontSize: 16, color: AppConstants.textPrimary),
+            decoration: InputDecoration(
+              hintText: 'Enter amount',
+              hintStyle: TextStyle(
+                color: AppConstants.textSecondary.withOpacity(0.6),
+              ),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              prefixIcon: Obx(
+                () => Container(
+                  width: 40,
+                  alignment: Alignment.center,
+                  child: Text(
+                    controller.currencySymbol,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppConstants.primaryColor,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Please enter amount';
+              }
+              final amount = double.tryParse(value);
+              if (amount == null || amount <= 0) {
+                return 'Please enter a valid amount';
+              }
+              return null;
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDateField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Date',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppConstants.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: _selectDate,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppConstants.borderColor),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  DateFormat('dd MMM yyyy').format(selectedDate),
+                  style: TextStyle(
+                    fontSize: Get.width * .03,
+                    color: AppConstants.textPrimary,
+                  ),
+                ),
+                Icon(
+                  Icons.calendar_month_rounded,
+                  size: Get.width * .04,
+                  color: AppConstants.textSecondary,
+                ),
               ],
             ),
           ),
         ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Get.back(), child: Text('Cancel')),
-        ElevatedButton(
-          onPressed: () {
-            if (_formKey.currentState!.validate()) {
-              controller.addTransaction(
-                amount: double.parse(amountController.text),
-                date: selectedDate,
-                description: descriptionController.text.isEmpty
-                    ? null
-                    : descriptionController.text,
-                source: sourceController.text.isEmpty
-                    ? null
-                    : sourceController.text,
-                isCash: isCash,
-                referenceNumber: referenceController.text.isEmpty
-                    ? null
-                    : referenceController.text,
-              );
-              Get.back();
-            }
-          },
-          child: Text('Add'),
+      ],
+    );
+  }
+
+  Widget _buildTimeField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Time',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppConstants.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: _selectTime,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppConstants.borderColor),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  selectedTime.format(context),
+                  style: TextStyle(
+                    fontSize: Get.width * .03,
+                    color: AppConstants.textPrimary,
+                  ),
+                ),
+                Icon(
+                  Icons.access_time_rounded,
+                  size: Get.width * .04,
+                  color: AppConstants.textSecondary,
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    int maxLines = 1,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppConstants.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppConstants.borderColor),
+          ),
+          child: TextFormField(
+            controller: controller,
+            maxLines: maxLines,
+            style: TextStyle(fontSize: 16, color: AppConstants.textPrimary),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: TextStyle(
+                color: AppConstants.textSecondary.withOpacity(0.6),
+              ),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              prefixIcon: Icon(icon, color: AppConstants.textSecondary),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPaymentTypeSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Payment Type',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppConstants.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: ChoiceChip(
+                label: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.money_rounded,
+                      size: 18,
+                      color: isCash ? Colors.white : Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Cash',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: isCash
+                            ? Colors.white
+                            : AppConstants.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                selected: isCash,
+                onSelected: (selected) {
+                  setState(() {
+                    isCash = selected;
+                  });
+                },
+                selectedColor: Colors.blue.shade600,
+                backgroundColor: AppConstants.surfaceColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ChoiceChip(
+                label: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.account_balance_rounded,
+                      size: 18,
+                      color: !isCash ? Colors.white : Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Bank',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: !isCash
+                            ? Colors.white
+                            : AppConstants.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                selected: !isCash,
+                onSelected: (selected) {
+                  setState(() {
+                    isCash = !selected;
+                  });
+                },
+                selectedColor: Colors.blue.shade600,
+                backgroundColor: AppConstants.surfaceColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReferenceField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Reference Number',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppConstants.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppConstants.borderColor),
+          ),
+          child: TextFormField(
+            controller: referenceController,
+            style: TextStyle(fontSize: 16, color: AppConstants.textPrimary),
+            decoration: InputDecoration(
+              hintText: 'Cheque/Transaction number (optional)',
+              hintStyle: TextStyle(
+                color: AppConstants.textSecondary.withOpacity(0.6),
+              ),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              prefixIcon: Icon(
+                Icons.numbers_rounded,
+                color: AppConstants.textSecondary,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _selectDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(primary: AppConstants.primaryColor),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (date != null) {
+      setState(() {
+        selectedDate = date;
+      });
+    }
+  }
+
+  Future<void> _selectTime() async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: selectedTime,
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(primary: AppConstants.primaryColor),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (time != null) {
+      setState(() {
+        selectedTime = time;
+      });
+    }
+  }
+
+  void _addTransaction() {
+    if (_formKey.currentState!.validate()) {
+      // Combine date and time
+      final combinedDateTime = DateTime(
+        selectedDate.year,
+        selectedDate.month,
+        selectedDate.day,
+        selectedTime.hour,
+        selectedTime.minute,
+      );
+
+      controller.addTransaction(
+        amount: double.parse(amountController.text.trim()),
+        date: combinedDateTime,
+        description: descriptionController.text.trim().isEmpty
+            ? null
+            : descriptionController.text.trim(),
+        source: sourceController.text.trim().isEmpty
+            ? null
+            : sourceController.text.trim(),
+        isCash: isCash,
+        referenceNumber: referenceController.text.trim().isEmpty
+            ? null
+            : referenceController.text.trim(),
+      );
+
+      Get.back();
+
+      // Show success message
+      Get.snackbar(
+        'Success',
+        'Amount added successfully',
+        backgroundColor: AppConstants.successColor,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    amountController.dispose();
+    descriptionController.dispose();
+    sourceController.dispose();
+    referenceController.dispose();
+    super.dispose();
   }
 }

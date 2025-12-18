@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:moneyrol/constants/app_constants.dart';
 
 import 'package:moneyrol/dashboard/controller/dashboard_controller.dart';
 import 'package:moneyrol/dashboard/model/company_model.dart';
@@ -17,11 +18,22 @@ class HistoryScreen extends StatelessWidget {
   static const String allCompaniesId = 'all';
   static const String normalTransactionsId = 'normal';
 
+  // Color constants
+
   @override
   Widget build(BuildContext context) {
     return Obx(
       () => Scaffold(
-        appBar: AppBar(title: const Text('Transaction History')),
+        backgroundColor: AppConstants.backgroundColor,
+        appBar: AppBar(
+          title: const Text(
+            'Transaction History',
+            style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: Colors.white,
+          elevation: 1,
+          iconTheme: const IconThemeData(color: Colors.black),
+        ),
         body: Column(
           children: [
             _buildCompanyFilterList(),
@@ -41,7 +53,6 @@ class HistoryScreen extends StatelessWidget {
 
   Widget _buildCompanyFilterList() {
     return Obx(() {
-      final theme = Get.theme;
       final companies = controller.companies;
 
       final options = [
@@ -50,11 +61,16 @@ class HistoryScreen extends StatelessWidget {
         ...companies.map((c) => {'id': c.id, 'name': c.name}),
       ];
 
-      return SizedBox(
+      return Container(
         height: 52,
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+          ),
+        ),
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           itemCount: options.length,
           itemBuilder: (_, i) {
             final opt = options[i];
@@ -62,23 +78,22 @@ class HistoryScreen extends StatelessWidget {
 
             return Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: ActionChip(
-                backgroundColor: isSelected
-                    ? theme.primaryColor
-                    : theme.colorScheme.surfaceVariant,
+              child: ChoiceChip(
                 label: Text(
                   opt['name'] ?? "",
                   style: TextStyle(
-                    color: isSelected
-                        ? Colors.white
-                        : theme.textTheme.bodyMedium?.color,
-                    fontWeight: isSelected
-                        ? FontWeight.bold
-                        : FontWeight.normal,
+                    color: isSelected ? Colors.white : AppConstants.textColor,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                onPressed: () =>
+                selected: isSelected,
+                onSelected: (_) =>
                     controller.selectedCompanyId.value = opt['id'] ?? "",
+                selectedColor: AppConstants.primaryColor,
+                backgroundColor: AppConstants.surfaceColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
               ),
             );
           },
@@ -91,8 +106,6 @@ class HistoryScreen extends StatelessWidget {
 
   Widget _buildSummaryCard() {
     return Obx(() {
-      final theme = Get.theme;
-
       final received = controller.getSelectedTotalReceived();
       final sent = controller.getSelectedTotalSent();
       final balance = received - sent;
@@ -112,38 +125,51 @@ class HistoryScreen extends StatelessWidget {
         title = '${company?.name ?? 'Company'} Balance';
       }
 
-      return Card(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: theme.textTheme.titleMedium),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  _summaryItem(
-                    'Received',
-                    received,
-                    theme.colorScheme.secondary,
-                  ),
-                  _summaryItem(
-                    'Sent',
-                    sent,
-                    isNormal ? theme.disabledColor : theme.colorScheme.error,
-                  ),
-                  _summaryItem(
-                    'Net',
-                    balance,
-                    balance >= 0
-                        ? theme.colorScheme.secondary
-                        : theme.colorScheme.error,
-                  ),
-                ],
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade300),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.shade200,
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppConstants.textColor,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                _summaryItem('Received', received, AppConstants.successColor),
+                _summaryItem(
+                  'Sent',
+                  sent,
+                  isNormal ? Colors.grey : AppConstants.errorColor,
+                ),
+                _summaryItem(
+                  'Net',
+                  balance,
+                  balance >= 0
+                      ? AppConstants.successColor
+                      : AppConstants.errorColor,
+                ),
+              ],
+            ),
+          ],
         ),
       );
     });
@@ -156,15 +182,21 @@ class HistoryScreen extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: Get.theme.textTheme.bodySmall),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: AppConstants.secondaryTextColor,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
           const SizedBox(height: 8),
-
-          // Amount container (NO OVERFLOW EVER)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(10),
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withOpacity(0.3)),
             ),
             child: FittedBox(
               fit: BoxFit.scaleDown,
@@ -172,8 +204,8 @@ class HistoryScreen extends StatelessWidget {
                 '${controller.selectedCurrency.value.symbol}'
                 '${amount.toStringAsFixed(2)}',
                 style: TextStyle(
-                  fontSize: 18, // base size
-                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                   color: color,
                 ),
               ),
@@ -238,15 +270,20 @@ class HistoryScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.receipt_long,
-              size: 64,
-              color: Get.theme.iconTheme.color?.withOpacity(0.4),
-            ),
-            const SizedBox(height: 12),
+            Icon(Icons.receipt_long, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
             Text(
               'No transactions found',
-              style: Get.theme.textTheme.bodyMedium,
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Add transactions to see them here',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
             ),
           ],
         ),
@@ -268,19 +305,19 @@ class HistoryScreen extends StatelessWidget {
       builder: (_) => AlertDialog(
         title: const Text('Delete Transaction'),
         content: const Text(
-          'Are you sure you want to delete this transaction?',
+          'Are you sure you want to delete this transaction? This action cannot be undone.',
         ),
         actions: [
-          TextButton(onPressed: Get.back, child: const Text('Cancel')),
+          TextButton(
+            onPressed: Get.back,
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
           TextButton(
             onPressed: () {
               onConfirm();
               Get.back();
             },
-            child: Text(
-              'Delete',
-              style: TextStyle(color: Get.theme.colorScheme.error),
-            ),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -333,90 +370,115 @@ class _TransactionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Get.theme;
     final controller = Get.find<DashboardController>();
+    final amountColor = isPositive
+        ? Colors.green.shade600
+        : Colors.red.shade600;
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: theme.textTheme.bodySmall,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(Icons.edit, color: theme.primaryColor),
-                  onPressed: onEdit,
-                ),
-                IconButton(
-                  icon: Icon(Icons.delete, color: theme.colorScheme.error),
-                  onPressed: onDelete,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  DateFormat('dd MMM yyyy • hh:mm a').format(date),
-                  style: theme.textTheme.bodySmall,
-                ),
-                IntrinsicWidth(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color:
-                          (isPositive
-                                  ? theme.colorScheme.secondary
-                                  : theme.colorScheme.error)
-                              .withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        '${isPositive ? '+' : '-'}'
-                        '${controller.selectedCurrency.value.symbol}'
-                        '${amount.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontSize: 18, // safe base size
-                          fontWeight: FontWeight.bold,
-                          color: isPositive
-                              ? theme.colorScheme.secondary
-                              : theme.colorScheme.error,
-                        ),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade100,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.edit, color: Colors.grey.shade700),
+                onPressed: onEdit,
+                splashRadius: 20,
+              ),
+              IconButton(
+                icon: Icon(Icons.delete, color: Colors.grey.shade700),
+                onPressed: onDelete,
+                splashRadius: 20,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                DateFormat('dd MMM yyyy • hh:mm a').format(date),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: amountColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: amountColor.withOpacity(0.3)),
+                ),
+                child: Text(
+                  '${isPositive ? '+' : '-'}'
+                  '${controller.selectedCurrency.value.symbol}'
+                  '${amount.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: amountColor,
                   ),
                 ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(color: Colors.grey.shade200, height: 1),
+          const SizedBox(height: 8),
+          Text(
+            extraInfo,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade600,
+              fontStyle: FontStyle.italic,
             ),
-            const SizedBox(height: 12),
-            Divider(color: theme.dividerColor),
-            const SizedBox(height: 6),
-            Text(extraInfo, style: theme.textTheme.bodySmall),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

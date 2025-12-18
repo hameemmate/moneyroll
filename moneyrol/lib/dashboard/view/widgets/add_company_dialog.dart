@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:moneyrol/constants/app_constants.dart';
 import '../../controller/dashboard_controller.dart';
 
 class AddCompanyDialog extends StatefulWidget {
@@ -18,94 +19,241 @@ class _AddCompanyDialogState extends State<AddCompanyDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return AlertDialog(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      title: Text(
-        'Add Partners',
-        style: TextStyle(fontWeight: FontWeight.bold),
-      ),
-      content: SizedBox(
-        width: Get.width,
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: nameController,
-                  decoration: InputDecoration(
-                    labelText: 'Partner Name*',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.business),
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: AppConstants.backgroundColor,
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Add New Partner',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AppConstants.textPrimary,
+                    ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter Partner name';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: 16),
-                TextFormField(
-                  controller: descriptionController,
-                  decoration: InputDecoration(
-                    labelText: 'Description (Optional)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.description),
+                  IconButton(
+                    icon: Icon(Icons.close, color: AppConstants.textSecondary),
+                    onPressed: () => Get.back(),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
-                  maxLines: 3,
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Fill in the details to add a new partner',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppConstants.textSecondary,
                 ),
-                SizedBox(height: 16),
-                TextFormField(
-                  controller: contactPersonController,
-                  decoration: InputDecoration(
-                    labelText: 'Contact Person (Optional)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
+              ),
+              const SizedBox(height: 24),
+              Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    _buildTextField(
+                      controller: nameController,
+                      label: 'Partner Name',
+                      hint: 'Enter partner name',
+                      icon: Icons.business_rounded,
+                      isRequired: true,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Partner name is required';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: descriptionController,
+                      label: 'Description',
+                      hint: 'Add a description (optional)',
+                      icon: Icons.description_rounded,
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: contactPersonController,
+                      label: 'Contact Person',
+                      hint: 'Contact person name (optional)',
+                      icon: Icons.person_rounded,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: phoneController,
+                      label: 'Phone Number',
+                      hint: 'Phone number (optional)',
+                      icon: Icons.phone_rounded,
+                      keyboardType: TextInputType.phone,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Get.back(),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        side: BorderSide(color: AppConstants.borderColor),
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppConstants.textSecondary,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                SizedBox(height: 16),
-                TextFormField(
-                  controller: phoneController,
-                  decoration: InputDecoration(
-                    labelText: 'Phone Number (Optional)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.phone),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _addPartner,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppConstants.primaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        'Add Partner',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
                   ),
-                  keyboardType: TextInputType.phone,
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
-      actions: [
-        TextButton(onPressed: () => Get.back(), child: Text('Cancel')),
-        ElevatedButton(
-          onPressed: () {
-            if (_formKey.currentState!.validate()) {
-              controller.addCompany(
-                name: nameController.text,
-                description: descriptionController.text.isEmpty
-                    ? null
-                    : descriptionController.text,
-                contactPerson: contactPersonController.text.isEmpty
-                    ? null
-                    : contactPersonController.text,
-                phoneNumber: phoneController.text.isEmpty
-                    ? null
-                    : phoneController.text,
-              );
-              Get.back();
-            }
-          },
-          child: Text('Add Partner'),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    bool isRequired = false,
+    TextInputType keyboardType = TextInputType.text,
+    int maxLines = 1,
+    String? Function(String?)? validator,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppConstants.textPrimary,
+              ),
+            ),
+            if (isRequired)
+              Text(
+                ' *',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppConstants.errorColor,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppConstants.borderColor),
+          ),
+          child: TextFormField(
+            controller: controller,
+            keyboardType: keyboardType,
+            maxLines: maxLines,
+            validator: validator,
+            style: TextStyle(fontSize: 16, color: AppConstants.textPrimary),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: TextStyle(
+                color: AppConstants.textSecondary.withOpacity(0.6),
+              ),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              prefixIcon: Icon(icon, color: AppConstants.primaryColor),
+              suffixIcon: controller.text.isNotEmpty
+                  ? IconButton(
+                      icon: Icon(
+                        Icons.clear,
+                        color: AppConstants.textSecondary,
+                        size: 20,
+                      ),
+                      onPressed: () => controller.clear(),
+                      padding: EdgeInsets.zero,
+                    )
+                  : null,
+            ),
+          ),
         ),
       ],
     );
+  }
+
+  void _addPartner() {
+    if (_formKey.currentState!.validate()) {
+      controller.addCompany(
+        name: nameController.text.trim(),
+        description: descriptionController.text.trim().isEmpty
+            ? null
+            : descriptionController.text.trim(),
+        contactPerson: contactPersonController.text.trim().isEmpty
+            ? null
+            : contactPersonController.text.trim(),
+        phoneNumber: phoneController.text.trim().isEmpty
+            ? null
+            : phoneController.text.trim(),
+      );
+      Get.back();
+
+      // Show success message
+      Get.snackbar(
+        'Success',
+        'Partner added successfully',
+        backgroundColor: AppConstants.successColor,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
   }
 
   @override

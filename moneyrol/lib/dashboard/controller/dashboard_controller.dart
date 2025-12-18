@@ -32,7 +32,6 @@ class DashboardController extends GetxController {
   final RxList<CompanyTransaction> companyTransactions =
       <CompanyTransaction>[].obs;
   final RxDouble totalAmount = 0.0.obs;
-  final Rx<AppThemeType> currentTheme = AppThemeType.blue.obs;
   final Rx<Currency> selectedCurrency = Currency(
     symbol: '₹',
     code: 'INR',
@@ -83,35 +82,9 @@ class DashboardController extends GetxController {
   }
 
   void _initializeApp() {
-    _initializeTheme();
     _initializeCurrency();
     _loadAllData();
     _calculateTotalAmount();
-  }
-
-  // ==================== Theme Management ====================
-  void _initializeTheme() {
-    final savedTheme = _settingsBox.get('theme', defaultValue: 'blue');
-    AppThemeType themeType;
-
-    try {
-      themeType = AppThemeType.values.firstWhere(
-        (e) => e.name == savedTheme,
-        orElse: () => AppThemeType.blue,
-      );
-    } catch (e) {
-      themeType = AppThemeType.blue;
-    }
-
-    currentTheme.value = themeType;
-    Get.changeTheme(AppThemes.getThemeData(themeType));
-  }
-
-  void changeTheme(AppThemeType theme) {
-    currentTheme.value = theme;
-    _settingsBox.put('theme', theme.name);
-    Get.changeTheme(AppThemes.getThemeData(theme));
-    update();
   }
 
   // ==================== Currency Management ====================
@@ -495,9 +468,8 @@ class DashboardController extends GetxController {
   Future<bool?> _showImportConfirmationDialog() async {
     return await Get.dialog<bool>(
       AlertDialog(
-        backgroundColor: AppThemes.getThemeData(
-          currentTheme.value,
-        ).scaffoldBackgroundColor,
+        backgroundColor: Colors.white,
+
         title: const Text('Import Data'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -525,15 +497,15 @@ class DashboardController extends GetxController {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppConstants.white,
+                color: AppConstants.backgroundColor,
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: const Text(
+              child: Text(
                 '/storage/emulated/0/moneyroll',
                 style: TextStyle(
                   fontFamily: 'monospace',
                   fontSize: 12,
-                  color: AppConstants.warningColor,
+                  color: AppConstants.expenseColor,
                 ),
               ),
             ),
@@ -554,7 +526,7 @@ class DashboardController extends GetxController {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppConstants.expenseColor,
 
-              foregroundColor: AppConstants.white,
+              foregroundColor: AppConstants.backgroundColor,
             ),
             child: Text('OK - Proceed'),
           ),
