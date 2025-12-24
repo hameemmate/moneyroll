@@ -430,23 +430,31 @@ class AboutScreen extends StatelessWidget {
 
   // FIXED: Email launch function with proper error handling
   Future<void> _launchEmail(BuildContext context) async {
+    final String email = 'nithinlal@astsolution.org';
+    final String subject = 'Moneyroll App Feedback';
+
+    // Create the mailto URL
     final Uri emailLaunchUri = Uri(
       scheme: 'mailto',
-      path: 'nithinlal@astsolution.org',
-      queryParameters: {'subject': 'Moneyroll App Feedback'},
+      path: email,
+      queryParameters: {'subject': subject},
     );
 
-    final String emailString = emailLaunchUri.toString();
-
     try {
-      if (await canLaunchUrl(Uri.parse(emailString))) {
-        await launchUrl(Uri.parse(emailString));
+      // Check if we can launch the URL
+      if (await canLaunchUrl(emailLaunchUri)) {
+        // Launch the email app
+        await launchUrl(
+          emailLaunchUri,
+          mode: LaunchMode.externalApplication, // Important for iOS
+        );
       } else {
-        // If mailto: doesn't work, try showing a snackbar
+        // Show fallback dialog if email app is not available
         _showNoEmailAppDialog(context);
       }
     } catch (e) {
-      // Alternative: Show email in a dialog
+      print('Error launching email: $e');
+      // Show alternative way to contact
       _showEmailFallback(context);
     }
   }
@@ -458,7 +466,7 @@ class AboutScreen extends StatelessWidget {
         title: const Text('Email App Not Found'),
         content: const Text(
           'No email app detected on your device. '
-          'Please send your feedback to: support@moneyroll.example.com',
+          'Please send your feedback to: nithinlal@astsolution.org',
         ),
         actions: [
           TextButton(
@@ -468,7 +476,7 @@ class AboutScreen extends StatelessWidget {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _copyToClipboard(context, 'support@moneyroll.example.com');
+              _copyToClipboard(context, 'nithinlal@astsolution.org');
             },
             child: const Text('Copy Email'),
           ),
@@ -495,11 +503,11 @@ class AboutScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const SelectableText(
-                'support@moneyroll.example.com',
+                'nithinlal@astsolution.org',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: Colors.teal,
                 ),
               ),
             ),
@@ -514,7 +522,7 @@ class AboutScreen extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              _copyToClipboard(context, 'support@moneyroll.example.com');
+              _copyToClipboard(context, 'nithinlal@astsolution.org');
               Navigator.pop(context);
             },
             child: const Text('Copy Email'),
@@ -523,23 +531,70 @@ class AboutScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  void _copyToClipboard(BuildContext context, String text) async {
-    await Clipboard.setData(ClipboardData(text: text));
-
-    // Show a snackbar confirmation
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Copied to clipboard'),
-        duration: const Duration(seconds: 2),
-        action: SnackBarAction(
-          label: 'OK',
-          onPressed: () {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          },
-        ),
+void _showEmailFallback(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Contact Support'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Send your feedback to:'),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const SelectableText(
+              'nithinlal@astsolution.org',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text('Subject: Moneyroll App Feedback'),
+        ],
       ),
-    );
-  }
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        TextButton(
+          onPressed: () {
+            _copyToClipboard(context, 'nithinlal@astsolution.org');
+            Navigator.pop(context);
+          },
+          child: const Text('Copy Email'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _copyToClipboard(BuildContext context, String text) async {
+  await Clipboard.setData(ClipboardData(text: text));
+
+  // Show a snackbar confirmation
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: const Text('Copied to clipboard'),
+      duration: const Duration(seconds: 2),
+      action: SnackBarAction(
+        label: 'OK',
+        onPressed: () {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        },
+      ),
+    ),
+  );
 }
