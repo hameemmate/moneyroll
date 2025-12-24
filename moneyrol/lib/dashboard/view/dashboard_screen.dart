@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:moneyrol/constants/app_constants.dart';
 import 'package:moneyrol/dashboard/model/company_transation_model.dart';
+import 'package:moneyrol/dashboard/view/about_app_screen.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_company_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_company_transation_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_transation_dialog.dart';
@@ -30,6 +31,12 @@ class DashboardScreen extends StatelessWidget {
         ),
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
+          IconButton(
+            onPressed: () {
+              Get.to(AboutScreen());
+            },
+            icon: Icon(Icons.info),
+          ),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 8),
             child: IconButton(
@@ -519,6 +526,7 @@ class DashboardScreen extends StatelessWidget {
             },
           );
         }),
+        SizedBox(height: Get.width * .2),
       ],
     );
   }
@@ -532,186 +540,196 @@ class DashboardScreen extends StatelessWidget {
       ),
       builder: (context) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: AppConstants.borderColor),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Add New Transaction',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: AppConstants.textPrimary,
-                      ),
+          bottom: true,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: AppConstants.borderColor),
                     ),
-                    Obx(
-                      () => Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Add New Transaction',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AppConstants.textPrimary,
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: Text(
-                          controller.currencySymbol,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppConstants.primaryColor,
+                      ),
+                      Obx(
+                        () => Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Text(
+                            controller.currencySymbol,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppConstants.primaryColor,
+                            ),
                           ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade600.withOpacity(0.1),
+                      shape: BoxShape.circle,
                     ),
-                  ],
-                ),
-              ),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade600.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.attach_money, color: Colors.blue.shade600),
-                ),
-                title: Text(
-                  'Add Normal Amount',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppConstants.textPrimary,
-                  ),
-                ),
-                subtitle: Text('Add money received (not from Partners)'),
-                onTap: () {
-                  Get.back();
-                  showDialog(
-                    context: context,
-                    builder: (context) => AddTransactionDialog(),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.shade600.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.business, color: Colors.purple.shade600),
-                ),
-                title: Text(
-                  'Add Partners',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppConstants.textPrimary,
-                  ),
-                ),
-                subtitle: Text('Add new Partners'),
-                onTap: () {
-                  Get.back();
-                  showDialog(
-                    context: context,
-                    builder: (context) => AddCompanyDialog(),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppConstants.incomeColor.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.download, color: AppConstants.incomeColor),
-                ),
-                title: Text(
-                  'Received from Partners',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppConstants.textPrimary,
-                  ),
-                ),
-                subtitle: Text('Add money received from a Partner'),
-                onTap: () {
-                  Get.back();
-                  showDialog(
-                    context: context,
-                    builder: (context) => AddCompanyTransactionDialog(
-                      type: TransactionType.received,
+                    child: Icon(
+                      Icons.attach_money,
+                      color: Colors.blue.shade600,
                     ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppConstants.expenseColor.withOpacity(0.1),
-                    shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.upload, color: AppConstants.expenseColor),
+                  title: Text(
+                    'Add Normal Amount',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppConstants.textPrimary,
+                    ),
+                  ),
+                  subtitle: Text('Add money received (not from Partners)'),
+                  onTap: () {
+                    Get.back();
+                    showDialog(
+                      context: context,
+                      builder: (context) => AddTransactionDialog(),
+                    );
+                  },
                 ),
-                title: Text(
-                  'Sent to Partners',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppConstants.textPrimary,
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade600.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.business, color: Colors.purple.shade600),
                   ),
+                  title: Text(
+                    'Add Partners',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppConstants.textPrimary,
+                    ),
+                  ),
+                  subtitle: Text('Add new Partners'),
+                  onTap: () {
+                    Get.back();
+                    showDialog(
+                      context: context,
+                      builder: (context) => AddCompanyDialog(),
+                    );
+                  },
                 ),
-                subtitle: Text('Add money sent to a Partner'),
-                onTap: () {
-                  Get.back();
-                  showDialog(
-                    context: context,
-                    builder: (context) =>
-                        AddCompanyTransactionDialog(type: TransactionType.sent),
-                  );
-                },
-              ),
-              const Divider(height: 20),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withOpacity(0.1),
-                    shape: BoxShape.circle,
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppConstants.incomeColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.download,
+                      color: AppConstants.incomeColor,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.currency_exchange,
-                    color: Colors.amber,
+                  title: Text(
+                    'Received from Partners',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppConstants.textPrimary,
+                    ),
                   ),
+                  subtitle: Text('Add money received from a Partner'),
+                  onTap: () {
+                    Get.back();
+                    showDialog(
+                      context: context,
+                      builder: (context) => AddCompanyTransactionDialog(
+                        type: TransactionType.received,
+                      ),
+                    );
+                  },
                 ),
-                title: Text(
-                  'Change Currency',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppConstants.textPrimary,
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppConstants.expenseColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.upload, color: AppConstants.expenseColor),
                   ),
+                  title: Text(
+                    'Sent to Partners',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppConstants.textPrimary,
+                    ),
+                  ),
+                  subtitle: Text('Add money sent to a Partner'),
+                  onTap: () {
+                    Get.back();
+                    showDialog(
+                      context: context,
+                      builder: (context) => AddCompanyTransactionDialog(
+                        type: TransactionType.sent,
+                      ),
+                    );
+                  },
                 ),
-                subtitle: const Text('Select different currency symbol'),
-                onTap: () {
-                  Get.back();
-                  showDialog(
-                    context: context,
-                    builder: (context) => CurrencySelectionDialog(),
-                  );
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
+                const Divider(height: 20),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.currency_exchange,
+                      color: Colors.amber,
+                    ),
+                  ),
+                  title: Text(
+                    'Change Currency',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppConstants.textPrimary,
+                    ),
+                  ),
+                  subtitle: const Text('Select different currency symbol'),
+                  onTap: () {
+                    Get.back();
+                    showDialog(
+                      context: context,
+                      builder: (context) => CurrencySelectionDialog(),
+                    );
+                  },
+                ),
+                SizedBox(height: Get.width * .15),
+              ],
+            ),
           ),
         );
       },

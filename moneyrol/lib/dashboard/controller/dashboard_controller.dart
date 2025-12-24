@@ -1,14 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:hive_flutter/adapters.dart';
 import 'package:moneyrol/constants/app_constants.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:moneyrol/dashboard/model/company_transation_model.dart';
 import 'package:moneyrol/dashboard/model/transation_model.dart';
-import 'package:moneyrol/theme/app_theme.dart';
 import '../model/company_model.dart';
 import '../model/currency_model.dart';
 import '../../constants/hive_constants.dart';
@@ -373,15 +374,26 @@ class DashboardController extends GetxController {
       final exportData = _prepareExportData();
       final jsonString = jsonEncode(exportData);
 
-      if (!await _requestStoragePermission()) {
-        return;
-      }
+      // Convert string to bytes - THIS IS THE KEY FIX
+      final bytes = Uint8List.fromList(utf8.encode(jsonString));
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
 
-      final filePath = await _createBackupFile(jsonString);
-      _showSuccessSnackbar('Backup saved in moneyroll folder.');
-      print('Backup saved at: $filePath');
+      String? outputFile = await FilePicker.platform.saveFile(
+        dialogTitle: Platform.isIOS ? 'Save to Files' : 'Save Backup',
+        fileName: 'moneyroll_backup_$timestamp.json',
+        allowedExtensions: ['json'],
+        lockParentWindow: true,
+        bytes: bytes,
+      );
+
+      if (outputFile != null) {
+        _showSuccessSnackbar('Backup saved successfully');
+        print('Backup saved at: $outputFile');
+      } else {
+        _showErrorSnackbar('Backup cancelled');
+      }
     } catch (e) {
-      _showErrorSnackbar('Failed to save backup: $e');
+      _showErrorSnackbar('Failed to save backup: ${e.toString()}');
     }
   }
 
@@ -395,31 +407,6 @@ class DashboardController extends GetxController {
       'currency': selectedCurrency.value.toJson(),
       'exportDate': DateTime.now().toIso8601String(),
     };
-  }
-
-  Future<bool> _requestStoragePermission() async {
-    var status = await Permission.manageExternalStorage.request();
-    if (!status.isGranted) {
-      Get.snackbar("Permission Required", "Please allow storage access");
-      return false;
-    }
-    return true;
-  }
-
-  Future<String> _createBackupFile(String jsonString) async {
-    final directory = Directory('/storage/emulated/0/moneyroll');
-
-    if (!(await directory.exists())) {
-      await directory.create(recursive: true);
-    }
-
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = 'moneyroll_backup_$timestamp.json';
-    final filePath = '${directory.path}/$fileName';
-    final file = File(filePath);
-
-    await file.writeAsString(jsonString);
-    return filePath;
   }
 
   Future<void> importData() async {
@@ -469,7 +456,6 @@ class DashboardController extends GetxController {
     return await Get.dialog<bool>(
       AlertDialog(
         backgroundColor: Colors.white,
-
         title: const Text('Import Data'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -489,8 +475,9 @@ class DashboardController extends GetxController {
             const SizedBox(height: 8),
             const Divider(),
             const SizedBox(height: 8),
+            // Updated section:
             const Text(
-              'Exported data files are stored in:',
+              'Where to find backup files:',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
@@ -500,20 +487,27 @@ class DashboardController extends GetxController {
                 color: AppConstants.backgroundColor,
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Text(
-                '/storage/emulated/0/moneyroll',
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 12,
-                  color: AppConstants.expenseColor,
-                ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '• Backup files can be saved anywhere on your device',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '• Look in your Downloads folder or Files app',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '• File name format: moneyroll_backup_[timestamp].json',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Look for files named: moneyroll_backup_[timestamp].json',
-              style: TextStyle(fontSize: 12),
-            ),
           ],
         ),
         actions: [
@@ -525,10 +519,9 @@ class DashboardController extends GetxController {
             onPressed: () => Get.back(result: true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppConstants.expenseColor,
-
               foregroundColor: AppConstants.backgroundColor,
             ),
-            child: Text('OK - Proceed'),
+            child: const Text('OK - Proceed'),
           ),
         ],
       ),

@@ -43,6 +43,7 @@ class HistoryScreen extends StatelessWidget {
                   ? _buildNormalTransactionsList(context)
                   : _buildCompanyTransactionsList(context),
             ),
+            SizedBox(height: Get.width * .13),
           ],
         ),
       ),
@@ -79,6 +80,8 @@ class HistoryScreen extends StatelessWidget {
             return Padding(
               padding: const EdgeInsets.only(right: 8),
               child: ChoiceChip(
+                checkmarkColor: Colors.white,
+                selectedShadowColor: Colors.green,
                 label: Text(
                   opt['name'] ?? "",
                   style: TextStyle(
