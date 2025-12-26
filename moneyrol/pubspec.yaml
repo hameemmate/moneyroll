@@ -48,17 +48,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  flutter_native_splash: ^2.4.0
-
-flutter_native_splash:
-  # White background with centered logo
-  color: "#FFFFFF"
-  image: assets/images/logo.png
-  
-  # Platforms
-  android: true
-  ios: true
-
+ 
   
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
