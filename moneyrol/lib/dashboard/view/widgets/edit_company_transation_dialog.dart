@@ -28,6 +28,7 @@ class _EditCompanyTransactionDialogState
   late DateTime selectedDate;
   late TimeOfDay selectedTime;
   late TransactionType selectedType;
+  DateTime? selectedDeadline;
 
   @override
   void initState() {
@@ -48,6 +49,7 @@ class _EditCompanyTransactionDialogState
     selectedDate = widget.transaction.date;
     selectedTime = TimeOfDay.fromDateTime(widget.transaction.date);
     selectedType = widget.transaction.type;
+    selectedDeadline = widget.transaction.deadLine;
   }
 
   @override
@@ -153,6 +155,10 @@ class _EditCompanyTransactionDialogState
                         Expanded(child: _buildTimeField()),
                       ],
                     ),
+                    if (selectedType == TransactionType.sent) ...[
+                      const SizedBox(height: 16),
+                      _buildDeadlineField(),
+                    ],
                     const SizedBox(height: 16),
 
                     // Description
@@ -236,6 +242,74 @@ class _EditCompanyTransactionDialogState
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _selectDeadline() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: selectedDeadline ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(primary: AppConstants.primaryColor),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (date != null) {
+      setState(() {
+        selectedDeadline = date;
+      });
+    }
+  }
+
+  Widget _buildDeadlineField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Deadline (Optional)',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppConstants.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: _selectDeadline,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppConstants.borderColor),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  selectedDeadline == null
+                      ? 'Select deadline date'
+                      : DateFormat('dd MMM yyyy').format(selectedDeadline!),
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: selectedDeadline == null
+                        ? AppConstants.textSecondary
+                        : AppConstants.textPrimary,
+                  ),
+                ),
+                Icon(Icons.event_rounded, color: AppConstants.textSecondary),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -334,6 +408,7 @@ class _EditCompanyTransactionDialogState
                   if (selected) {
                     setState(() {
                       selectedType = TransactionType.received;
+                      selectedDeadline = null;
                     });
                   }
                 },
@@ -670,6 +745,9 @@ class _EditCompanyTransactionDialogState
         companyId: selectedCompanyId!,
         amount: double.parse(amountController.text.trim()),
         date: combinedDateTime,
+        deadline: selectedType == TransactionType.sent
+            ? selectedDeadline
+            : null,
         type: selectedType,
         description: descriptionController.text.trim().isEmpty
             ? null

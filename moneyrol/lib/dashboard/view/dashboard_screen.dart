@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:moneyrol/constants/app_constants.dart';
 import 'package:moneyrol/dashboard/model/company_transation_model.dart';
 import 'package:moneyrol/dashboard/view/about_app_screen.dart';
+import 'package:moneyrol/dashboard/view/over_due_transation_list.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_company_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_company_transation_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_transation_dialog.dart';
@@ -124,6 +125,9 @@ class DashboardScreen extends StatelessWidget {
               _buildQuickStats(),
               const SizedBox(height: 20),
               _buildRecentTransactions(),
+              const SizedBox(height: 20),
+              OverdueTransactionsList(controller: controller),
+              SizedBox(height: Get.width * .2),
             ],
           ),
         ),
@@ -426,35 +430,40 @@ class DashboardScreen extends StatelessWidget {
           final recentTransactions = allTransactions.take(10).toList();
 
           if (recentTransactions.isEmpty) {
-            return Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: AppConstants.cardColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppConstants.borderColor),
-              ),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.receipt_long,
-                    size: 48,
-                    color: Colors.grey.shade400,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No transactions yet',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: AppConstants.textSecondary,
-                      fontWeight: FontWeight.w500,
+            return Center(
+              child: Container(
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: AppConstants.cardColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppConstants.borderColor),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.receipt_long,
+                      size: 48,
+                      color: Colors.grey.shade400,
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Add your first transaction to get started',
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    Text(
+                      'No transactions yet',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: AppConstants.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Add your first transaction to get started',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }
@@ -526,7 +535,6 @@ class DashboardScreen extends StatelessWidget {
             },
           );
         }),
-        SizedBox(height: Get.width * .2),
       ],
     );
   }

@@ -26,6 +26,8 @@ class _AddCompanyTransactionDialogState
   TextEditingController descriptionController = TextEditingController();
   TextEditingController invoiceController = TextEditingController();
   TextEditingController paymentMethodController = TextEditingController();
+  TextEditingController deadlineController = TextEditingController();
+  DateTime? selectedDeadline;
   DateTime selectedDate = DateTime.now();
   TimeOfDay selectedTime = TimeOfDay.now();
 
@@ -115,6 +117,11 @@ class _AddCompanyTransactionDialogState
                       ],
                     ),
                     const SizedBox(height: 16),
+                    if (!isReceived) ...[
+                      const SizedBox(height: 1),
+                      _buildDeadlineField(),
+                      const SizedBox(height: 12),
+                    ],
 
                     // Description
                     _buildTextField(
@@ -230,6 +237,74 @@ class _AddCompanyTransactionDialogState
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _selectDeadline() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(primary: AppConstants.primaryColor),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (date != null) {
+      setState(() {
+        selectedDeadline = date;
+      });
+    }
+  }
+
+  Widget _buildDeadlineField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Deadline (Optional)',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppConstants.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: _selectDeadline,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppConstants.borderColor),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  selectedDeadline == null
+                      ? 'Select deadline date'
+                      : DateFormat('dd MMM yyyy').format(selectedDeadline!),
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: selectedDeadline == null
+                        ? AppConstants.textSecondary
+                        : AppConstants.textPrimary,
+                  ),
+                ),
+                Icon(Icons.event_rounded, color: AppConstants.textSecondary),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -601,6 +676,7 @@ class _AddCompanyTransactionDialogState
         companyId: selectedCompanyId!,
         amount: double.parse(amountController.text.trim()),
         date: combinedDateTime,
+        deadline: selectedDeadline,
         type: widget.type,
         description: descriptionController.text.trim().isEmpty
             ? null

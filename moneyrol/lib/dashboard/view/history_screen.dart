@@ -255,8 +255,7 @@ class HistoryScreen extends StatelessWidget {
           date: ct.date,
           amount: ct.amount,
           isPositive: ct.type == TransactionType.received,
-          extraInfo:
-              'Invoice: ${ct.invoiceNumber ?? 'N/A'} • ${ct.paymentMethod ?? 'N/A'}',
+          extraInfo: _buildCompanyExtraInfo(ct),
           onEdit: () => _showEditCompanyTransactionDialog(context, ct),
           onDelete: () => _showDeleteConfirmation(
             context,
@@ -265,6 +264,31 @@ class HistoryScreen extends StatelessWidget {
         );
       }).toList(),
     );
+  }
+
+  String _buildCompanyExtraInfo(CompanyTransaction ct) {
+    String base =
+        'Invoice: ${ct.invoiceNumber ?? 'N/A'} • ${ct.paymentMethod ?? 'N/A'}';
+
+    // Only sent transactions can have deadline
+    if (ct.type == TransactionType.sent && ct.deadLine != null) {
+      final now = DateTime.now();
+      final deadline = ct.deadLine!;
+
+      final isOverdue = deadline.isBefore(
+        DateTime(now.year, now.month, now.day),
+      );
+
+      final deadlineText = DateFormat('dd MMM yyyy').format(deadline);
+
+      if (isOverdue) {
+        return '$base • ⚠ Overdue (Due $deadlineText)';
+      } else {
+        return '$base • Due $deadlineText';
+      }
+    }
+
+    return base;
   }
 
   Widget _buildTransactionList(List<Widget> items) {
@@ -373,6 +397,7 @@ class _TransactionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isOverdue = extraInfo.contains('Overdue');
     final controller = Get.find<DashboardController>();
     final amountColor = isPositive
         ? Colors.green.shade600
@@ -473,12 +498,13 @@ class _TransactionCard extends StatelessWidget {
           const SizedBox(height: 12),
           Divider(color: Colors.grey.shade200, height: 1),
           const SizedBox(height: 8),
+
           Text(
             extraInfo,
             style: TextStyle(
               fontSize: 13,
-              color: Colors.grey.shade600,
-              fontStyle: FontStyle.italic,
+              color: isOverdue ? Colors.red.shade600 : Colors.grey.shade600,
+              fontWeight: isOverdue ? FontWeight.w600 : FontWeight.normal,
             ),
           ),
         ],

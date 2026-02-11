@@ -80,6 +80,7 @@ class CompanyTransaction {
   final String companyName;
   final double amount;
   final DateTime date;
+  DateTime? deadLine;
   final TransactionType type;
   final String? description;
   final String? invoiceNumber;
@@ -94,6 +95,7 @@ class CompanyTransaction {
     required this.type,
     this.description,
     this.invoiceNumber,
+    this.deadLine,
     this.paymentMethod,
   });
 
@@ -104,6 +106,7 @@ class CompanyTransaction {
       'companyName': companyName,
       'amount': amount,
       'date': date.toIso8601String(),
+      'deadline': deadLine?.toIso8601String(),
       'type': type.index,
       'description': description,
       'invoiceNumber': invoiceNumber,
@@ -118,6 +121,7 @@ class CompanyTransaction {
       companyName: json['companyName'],
       amount: json['amount'].toDouble(),
       date: DateTime.parse(json['date']),
+      deadLine: DateTime.parse(json['deadline']),
       type: TransactionType.values[json['type']],
       description: json['description'],
       invoiceNumber: json['invoiceNumber'],
