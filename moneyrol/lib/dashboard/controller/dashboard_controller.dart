@@ -142,6 +142,12 @@ class DashboardController extends GetxController {
     totalAmount.value = total;
   }
 
+  void refreshData() {
+    _loadAllData();
+    _calculateTotalAmount();
+    update();
+  }
+
   // ==================== Transaction CRUD Operations ====================
   Future<void> addTransaction({
     required double amount,
@@ -226,40 +232,6 @@ class DashboardController extends GetxController {
   }
 
   // ==================== Company Transaction CRUD Operations ====================
-  Future<void> addCompanyTransaction({
-    required String companyId,
-    required double amount,
-    required DateTime date,
-    required TransactionType type,
-    DateTime? deadline,
-    String? description,
-    String? invoiceNumber,
-    String? paymentMethod,
-  }) async {
-    final company = _companyBox.get(companyId);
-    if (company == null) {
-      _showErrorSnackbar('Company not found');
-      return;
-    }
-
-    final transaction = CompanyTransaction(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      companyId: companyId,
-      companyName: company.name,
-      amount: amount,
-      date: date,
-      deadLine: deadline,
-      type: type,
-      description: description,
-      invoiceNumber: invoiceNumber,
-      paymentMethod: paymentMethod,
-    );
-
-    await _companyTransactionBox.put(transaction.id, transaction);
-    companyTransactions.add(transaction);
-    _calculateTotalAmount();
-    _showCompanyTransactionSuccessSnackbar(type, company.name);
-  }
 
   Future<void> editCompanyTransaction({
     required String id,
@@ -615,17 +587,204 @@ class DashboardController extends GetxController {
     );
   }
 
+  // dashboard_controller.dart - ADD THESE METHODS
+
+  // Add this method to check if a transaction can be sent
+  bool canSendMoney({
+    required double amount,
+    required SourceType sourceType,
+    String? sourceCompanyId,
+  }) {
+    if (sourceType == SourceType.normal) {
+      // Check normal transactions balance
+      double normalBalance = 0;
+      for (var transaction in transactions) {
+        normalBalance += transaction.amount;
+      }
+      // Add total received from companies minus sent
+      normalBalance += getTotalReceivedFromCompanies();
+      normalBalance -= getTotalSentToCompanies();
+
+      return normalBalance >= amount;
+    } else if (sourceType == SourceType.company && sourceCompanyId != null) {
+      // Check specific company balance
+      double companyBalance = 0;
+
+      // Calculate company's net balance
+      for (var ct in companyTransactions) {
+        if (ct.companyId == sourceCompanyId) {
+          if (ct.type == TransactionType.received) {
+            companyBalance += ct.amount;
+          } else {
+            companyBalance -= ct.amount;
+          }
+        }
+        // Also track transactions where this company is the source
+        if (ct.sourceCompanyId == sourceCompanyId &&
+            ct.type == TransactionType.sent) {
+          companyBalance -= ct.amount;
+        }
+      }
+
+      return companyBalance >= amount;
+    }
+    return false;
+  }
+
+  // Get company balance
+  double getCompanyBalance(String companyId) {
+    double balance = 0;
+
+    for (var ct in companyTransactions) {
+      if (ct.companyId == companyId) {
+        if (ct.type == TransactionType.received) {
+          balance += ct.amount;
+        } else {
+          balance -= ct.amount;
+        }
+      }
+      // Track outgoing from this company
+      if (ct.sourceCompanyId == companyId && ct.type == TransactionType.sent) {
+        balance -= ct.amount;
+      }
+    }
+
+    return balance;
+  }
+
+  // Get normal account balance
+  double getNormalBalance() {
+    double balance = 0;
+
+    for (var transaction in transactions) {
+      balance += transaction.amount;
+    }
+
+    for (var ct in companyTransactions) {
+      if (ct.type == TransactionType.received) {
+        balance += ct.amount;
+      } else if (ct.type == TransactionType.sent) {
+        if (ct.sourceType == SourceType.normal) {
+          balance -= ct.amount;
+        }
+      }
+    }
+
+    return balance;
+  }
+
+  // UPDATED: Add Company Transaction with source tracking
+  Future<void> addCompanyTransaction({
+    required String companyId,
+    required double amount,
+    required DateTime date,
+    required TransactionType type,
+    DateTime? deadline,
+    String? description,
+    String? invoiceNumber,
+    String? paymentMethod,
+    SourceType sourceType = SourceType.normal,
+    String? sourceCompanyId,
+  }) async {
+    final company = _companyBox.get(companyId);
+    if (company == null) {
+      _showErrorSnackbar('Company not found');
+      return;
+    }
+
+    // For sent transactions, check if source has enough money
+    if (type == TransactionType.sent) {
+      if (!canSendMoney(
+        amount: amount,
+        sourceType: sourceType,
+        sourceCompanyId: sourceCompanyId,
+      )) {
+        _showErrorSnackbar('Insufficient balance in source account');
+        return;
+      }
+    }
+
+    String? sourceCompanyName;
+    if (sourceType == SourceType.company && sourceCompanyId != null) {
+      final sourceCompany = _companyBox.get(sourceCompanyId);
+      sourceCompanyName = sourceCompany?.name;
+    }
+
+    final transaction = CompanyTransaction(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      companyId: companyId,
+      companyName: company.name,
+      amount: amount,
+      date: date,
+      deadLine: deadline,
+      type: type,
+      description: description,
+      invoiceNumber: invoiceNumber,
+      paymentMethod: paymentMethod,
+      sourceType: sourceType,
+      sourceCompanyId: sourceCompanyId,
+      sourceCompanyName: sourceCompanyName,
+    );
+
+    await _companyTransactionBox.put(transaction.id, transaction);
+    companyTransactions.add(transaction);
+    _calculateTotalAmount();
+
+    final sourceText = sourceType == SourceType.company
+        ? 'from ${sourceCompanyName ?? "company"}'
+        : 'from normal account';
+
+    _showCompanyTransactionSuccessSnackbar(
+      type,
+      company.name,
+      isUpdate: false,
+      sourceText: sourceText,
+    );
+  }
+
+  // Get company-to-company transactions
+  List<CompanyTransaction> getCompanyToCompanyTransactions() {
+    return companyTransactions
+        .where(
+          (ct) =>
+              ct.type == TransactionType.sent &&
+              ct.sourceType == SourceType.company &&
+              ct.sourceCompanyId != null,
+        )
+        .toList();
+  }
+
+  // Get transactions from a specific source company
+  List<CompanyTransaction> getTransactionsFromCompany(String companyId) {
+    return companyTransactions
+        .where(
+          (ct) =>
+              ct.sourceCompanyId == companyId &&
+              ct.type == TransactionType.sent,
+        )
+        .toList();
+  }
+
   void _showCompanyTransactionSuccessSnackbar(
     TransactionType type,
     String companyName, {
     bool isUpdate = false,
+    String sourceText = '',
   }) {
     final action = type == TransactionType.received
         ? 'received from'
         : 'sent to';
-    final message = isUpdate
-        ? 'Amount $action $companyName updated successfully'
-        : 'Amount $action $companyName successfully';
+
+    String message;
+    if (type == TransactionType.sent && sourceText.isNotEmpty) {
+      message = isUpdate
+          ? 'Amount $action $companyName updated $sourceText'
+          : 'Amount $action $companyName $sourceText successfully';
+    } else {
+      message = isUpdate
+          ? 'Amount $action $companyName updated successfully'
+          : 'Amount $action $companyName successfully';
+    }
 
     _showSuccessSnackbar(message);
   }

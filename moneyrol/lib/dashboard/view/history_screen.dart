@@ -7,6 +7,7 @@ import 'package:moneyrol/dashboard/controller/dashboard_controller.dart';
 import 'package:moneyrol/dashboard/model/company_model.dart';
 import 'package:moneyrol/dashboard/model/company_transation_model.dart';
 import 'package:moneyrol/dashboard/model/transation_model.dart';
+import 'package:moneyrol/dashboard/view/partner_to_partner_transfer_screen.dart';
 import 'package:moneyrol/dashboard/view/widgets/edit_company_transation_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/edit_transation_dialog.dart';
 
@@ -33,6 +34,16 @@ class HistoryScreen extends StatelessWidget {
           backgroundColor: Colors.white,
           elevation: 1,
           iconTheme: const IconThemeData(color: Colors.black),
+          actions: [
+            // Add this to the app bar actions or anywhere convenient
+            IconButton(
+              icon: const Icon(Icons.swap_horiz, color: Colors.purple),
+              onPressed: () {
+                Get.to(() => PartnerToPartnerTransfersScreen());
+              },
+              tooltip: 'Partner to Partner Transfers',
+            ),
+          ],
         ),
         body: Column(
           children: [
@@ -266,19 +277,30 @@ class HistoryScreen extends StatelessWidget {
     );
   }
 
+  // Update the _buildCompanyExtraInfo method in HistoryScreen
   String _buildCompanyExtraInfo(CompanyTransaction ct) {
-    String base =
-        'Invoice: ${ct.invoiceNumber ?? 'N/A'} • ${ct.paymentMethod ?? 'N/A'}';
+    String sourceInfo = '';
 
-    // Only sent transactions can have deadline
+    if (ct.type == TransactionType.sent) {
+      if (ct.sourceType == SourceType.normal) {
+        sourceInfo = 'From: Normal Account • ';
+      } else if (ct.sourceType == SourceType.company &&
+          ct.sourceCompanyName != null) {
+        sourceInfo = 'From: ${ct.sourceCompanyName} • ';
+      }
+    }
+
+    String base =
+        '$sourceInfo'
+        'Invoice: ${ct.invoiceNumber ?? 'N/A'} • '
+        '${ct.paymentMethod ?? 'N/A'}';
+
     if (ct.type == TransactionType.sent && ct.deadLine != null) {
       final now = DateTime.now();
       final deadline = ct.deadLine!;
-
       final isOverdue = deadline.isBefore(
         DateTime(now.year, now.month, now.day),
       );
-
       final deadlineText = DateFormat('dd MMM yyyy').format(deadline);
 
       if (isOverdue) {

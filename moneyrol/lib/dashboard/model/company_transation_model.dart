@@ -1,9 +1,13 @@
+// company_transation_model.dart - UPDATED
 import 'package:hive/hive.dart';
 
-// TransactionType enum
+// TransactionType enum (keep this)
 enum TransactionType { received, sent }
 
-// TransactionTypeAdapter class
+// SourceType enum for tracking where money comes from
+enum SourceType { normal, company, internal }
+
+// TransactionTypeAdapter (keep existing)
 class TransactionTypeAdapter extends TypeAdapter<TransactionType> {
   @override
   final int typeId = 2;
@@ -19,7 +23,23 @@ class TransactionTypeAdapter extends TypeAdapter<TransactionType> {
   }
 }
 
-// CompanyTransactionAdapter class
+// SourceTypeAdapter
+class SourceTypeAdapter extends TypeAdapter<SourceType> {
+  @override
+  final int typeId = 4;
+
+  @override
+  SourceType read(BinaryReader reader) {
+    return SourceType.values[reader.readByte()];
+  }
+
+  @override
+  void write(BinaryWriter writer, SourceType obj) {
+    writer.writeByte(obj.index);
+  }
+}
+
+// CompanyTransactionAdapter - UPDATED
 class CompanyTransactionAdapter extends TypeAdapter<CompanyTransaction> {
   @override
   final int typeId = 3;
@@ -45,13 +65,19 @@ class CompanyTransactionAdapter extends TypeAdapter<CompanyTransaction> {
       description: fields[6] as String?,
       invoiceNumber: fields[7] as String?,
       paymentMethod: fields[8] as String?,
+      deadLine: fields[9] != null ? DateTime.parse(fields[9] as String) : null,
+      sourceType: fields[10] != null
+          ? SourceType.values[fields[10] as int]
+          : SourceType.normal,
+      sourceCompanyId: fields[11] as String?,
+      sourceCompanyName: fields[12] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, CompanyTransaction obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -69,11 +95,19 @@ class CompanyTransactionAdapter extends TypeAdapter<CompanyTransaction> {
       ..writeByte(7)
       ..write(obj.invoiceNumber)
       ..writeByte(8)
-      ..write(obj.paymentMethod);
+      ..write(obj.paymentMethod)
+      ..writeByte(9)
+      ..write(obj.deadLine?.toIso8601String())
+      ..writeByte(10)
+      ..write(obj.sourceType.index)
+      ..writeByte(11)
+      ..write(obj.sourceCompanyId)
+      ..writeByte(12)
+      ..write(obj.sourceCompanyName);
   }
 }
 
-// CompanyTransaction model class
+// CompanyTransaction model class - UPDATED
 class CompanyTransaction {
   final String id;
   final String companyId;
@@ -85,6 +119,9 @@ class CompanyTransaction {
   final String? description;
   final String? invoiceNumber;
   final String? paymentMethod;
+  final SourceType sourceType;
+  final String? sourceCompanyId;
+  final String? sourceCompanyName;
 
   CompanyTransaction({
     required this.id,
@@ -97,6 +134,9 @@ class CompanyTransaction {
     this.invoiceNumber,
     this.deadLine,
     this.paymentMethod,
+    this.sourceType = SourceType.normal,
+    this.sourceCompanyId,
+    this.sourceCompanyName,
   });
 
   Map<String, dynamic> toJson() {
@@ -111,6 +151,9 @@ class CompanyTransaction {
       'description': description,
       'invoiceNumber': invoiceNumber,
       'paymentMethod': paymentMethod,
+      'sourceType': sourceType.index,
+      'sourceCompanyId': sourceCompanyId,
+      'sourceCompanyName': sourceCompanyName,
     };
   }
 
@@ -121,11 +164,18 @@ class CompanyTransaction {
       companyName: json['companyName'],
       amount: json['amount'].toDouble(),
       date: DateTime.parse(json['date']),
-      deadLine: DateTime.parse(json['deadline']),
+      deadLine: json['deadline'] != null
+          ? DateTime.parse(json['deadline'])
+          : null,
       type: TransactionType.values[json['type']],
       description: json['description'],
       invoiceNumber: json['invoiceNumber'],
       paymentMethod: json['paymentMethod'],
+      sourceType: json['sourceType'] != null
+          ? SourceType.values[json['sourceType']]
+          : SourceType.normal,
+      sourceCompanyId: json['sourceCompanyId'],
+      sourceCompanyName: json['sourceCompanyName'],
     );
   }
 }

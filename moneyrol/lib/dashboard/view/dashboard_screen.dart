@@ -9,6 +9,7 @@ import 'package:moneyrol/dashboard/view/widgets/add_company_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_company_transation_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_transation_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/currency_seletion_dialog.dart';
+import 'package:moneyrol/dashboard/view/widgets/sent_to_company_dialog.dart';
 import '../controller/dashboard_controller.dart';
 import 'history_screen.dart';
 
@@ -539,6 +540,7 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+  // Update the _showAddOptions method in DashboardScreen
   void _showAddOptions() {
     showModalBottomSheet(
       context: Get.context!,
@@ -553,7 +555,7 @@ class DashboardScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Header
+                // Header (same as before)
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -689,23 +691,48 @@ class DashboardScreen extends StatelessWidget {
                     child: Icon(Icons.upload, color: AppConstants.expenseColor),
                   ),
                   title: Text(
-                    'Sent to Partners',
+                    'Send to Partners',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: AppConstants.textPrimary,
                     ),
                   ),
-                  subtitle: Text('Add money sent to a Partner'),
+                  subtitle: Text('Send money to a Partner'),
                   onTap: () {
                     Get.back();
                     showDialog(
                       context: context,
-                      builder: (context) => AddCompanyTransactionDialog(
-                        type: TransactionType.sent,
-                      ),
+                      builder: (context) => SendToCompanyDialog(),
                     );
                   },
                 ),
+                // NEW: Partner to Partner Transfer option
+                if (controller.companies.length >= 2)
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.swap_horiz, color: Colors.purple),
+                    ),
+                    title: Text(
+                      'Partner to Partner Transfer',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppConstants.textPrimary,
+                      ),
+                    ),
+                    subtitle: Text('Transfer money between Partners'),
+                    onTap: () {
+                      Get.back();
+                      showDialog(
+                        context: context,
+                        builder: (context) => SendToCompanyDialog(),
+                      );
+                    },
+                  ),
                 const Divider(height: 20),
                 ListTile(
                   leading: Container(
