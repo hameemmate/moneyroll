@@ -28,14 +28,12 @@
 	<array>
 		<string>mailto</string>
 	</array>
-		<key>NSPhotoLibraryUsageDescription</key>
-	<string>Money Roll needs access to your photo library to export and save expense reports and documents.</string>
-
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Money Roll needs permission to save exported reports to your device storage.</string>
-
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Money Roll needs permission to save exported reports to your device storage.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Money Roll needs access to your photo library to export and save expense reports and documents.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
