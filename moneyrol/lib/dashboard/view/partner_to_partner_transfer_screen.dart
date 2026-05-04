@@ -5,12 +5,13 @@ import 'package:intl/intl.dart';
 import 'package:moneyrol/constants/app_constants.dart';
 import 'package:moneyrol/dashboard/controller/dashboard_controller.dart';
 import 'package:moneyrol/dashboard/model/company_transation_model.dart';
-import 'package:moneyrol/dashboard/view/widgets/edit_partner_trander_dialog.dart';
+import 'package:moneyrol/dashboard/view/widgets/edit_partner_transfer_dialog.dart';
 
 class PartnerToPartnerTransfersScreen extends StatelessWidget {
   PartnerToPartnerTransfersScreen({super.key});
 
   final DashboardController controller = Get.find();
+  final RxString selectedCompanyId = 'all'.obs;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +26,7 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
             fontSize: 18,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: AppConstants.cardColor,
         elevation: 1,
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
@@ -35,36 +36,174 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Obx(() {
-        final transfers = controller.getCompanyToCompanyTransactions();
+      body: Column(
+        children: [
+          Obx(() => _buildCompanyFilterList()),
+          Expanded(
+            child: Obx(() {
+              final transfers = _getFilteredTransfers();
 
-        if (transfers.isEmpty) {
-          return _buildEmptyState();
-        }
+              if (transfers.isEmpty) {
+                return _buildEmptyState();
+              }
 
-        return Column(
-          children: [
-            _buildSummaryCard(transfers),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: transfers.length,
-                itemBuilder: (context, index) {
-                  final transfer = transfers[index];
-                  return _TransferCard(
-                    transfer: transfer,
-                    onEdit: () => _showEditTransferDialog(context, transfer),
-                    onDelete: () => _showDeleteConfirmation(context, transfer),
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      }),
+              return Column(
+                children: [
+                  _buildSummaryCard(transfers),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: transfers.length,
+                      itemBuilder: (context, index) {
+                        final transfer = transfers[index];
+                        return _TransferCard(
+                          transfer: transfer,
+                          onEdit: () =>
+                              _showEditTransferDialog(context, transfer),
+                          onDelete: () =>
+                              _showDeleteConfirmation(context, transfer),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            }),
+          ),
+        ],
+      ),
     );
   }
 
+  // ==================== FILTER LIST ====================
+  Widget _buildCompanyFilterList() {
+    final companies = controller.companies;
+
+    // Get all unique companies involved in transfers
+    final involvedCompanies = <String, String>{};
+    for (var transfer in controller.getCompanyToCompanyTransactions()) {
+      involvedCompanies[transfer.companyId] = transfer.companyName;
+      if (transfer.sourceCompanyId != null) {
+        involvedCompanies[transfer.sourceCompanyId!] =
+            transfer.sourceCompanyName ?? 'Unknown';
+      }
+    }
+
+    // Build filter options
+    final options = [
+      {'id': 'all', 'name': 'All Partners'},
+      ...involvedCompanies.entries.map(
+        (entry) => {'id': entry.key, 'name': entry.value},
+      ),
+    ];
+
+    return Container(
+      height: 52,
+      decoration: BoxDecoration(
+        color: AppConstants.cardColor,
+        border: Border(
+          bottom: BorderSide(color: AppConstants.borderColor, width: 1),
+        ),
+      ),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        itemCount: options.length,
+        itemBuilder: (_, i) {
+          final opt = options[i];
+
+          return Obx(() {
+            final isSelected = selectedCompanyId.value == opt['id'];
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                showCheckmark: true,
+                checkmarkColor: Colors.white,
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (opt['id'] == 'all')
+                      Icon(
+                        Icons.people,
+                        size: 16,
+                        color: isSelected
+                            ? Colors.white
+                            : AppConstants.primaryColor,
+                      )
+                    else
+                      Icon(
+                        Icons.business,
+                        size: 14,
+                        color: isSelected
+                            ? Colors.white
+                            : AppConstants.primaryColor,
+                      ),
+                    const SizedBox(width: 6),
+                    Text(
+                      opt['name'] ?? "",
+                      style: TextStyle(
+                        color: isSelected
+                            ? Colors.white
+                            : AppConstants.textColor,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+                selected: isSelected,
+                onSelected: (_) {
+                  selectedCompanyId.value = opt['id'] ?? "";
+                },
+                selectedColor: AppConstants.primaryColor,
+                backgroundColor: AppConstants.primaryColor.withOpacity(0.1),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            );
+          });
+        },
+      ),
+    );
+  }
+
+  // ==================== FILTER LOGIC ====================
+  List<CompanyTransaction> _getFilteredTransfers() {
+    final allTransfers = controller.getCompanyToCompanyTransactions();
+
+    if (selectedCompanyId.value == 'all') {
+      allTransfers.sort((a, b) => b.date.compareTo(a.date));
+      return allTransfers;
+    }
+
+    final filtered = allTransfers.where((transfer) {
+      return transfer.companyId == selectedCompanyId.value ||
+          transfer.sourceCompanyId == selectedCompanyId.value;
+    }).toList();
+
+    filtered.sort((a, b) => b.date.compareTo(a.date));
+    return filtered;
+  }
+
+  // ==================== SUMMARY STATS ====================
+  double _getTotalTransferred(List<CompanyTransaction> transfers) {
+    return transfers.fold(0.0, (sum, t) => sum + t.amount);
+  }
+
+  double _getAverageTransfer(List<CompanyTransaction> transfers) {
+    return transfers.isNotEmpty
+        ? _getTotalTransferred(transfers) / transfers.length
+        : 0.0;
+  }
+
+  double _getLargestTransfer(List<CompanyTransaction> transfers) {
+    if (transfers.isEmpty) return 0.0;
+    return transfers.map((t) => t.amount).reduce((a, b) => a > b ? a : b);
+  }
+
+  // ==================== UI COMPONENTS ====================
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -73,13 +212,13 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.purple.withOpacity(0.1),
+              color: AppConstants.primaryColor.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.swap_horiz,
               size: 64,
-              color: Colors.purple.withOpacity(0.5),
+              color: AppConstants.primaryColor.withOpacity(0.5),
             ),
           ),
           const SizedBox(height: 24),
@@ -117,10 +256,13 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
   }
 
   Widget _buildSummaryCard(List<CompanyTransaction> transfers) {
-    final totalTransferred = transfers.fold(0.0, (sum, t) => sum + t.amount);
-    final averageTransfer = transfers.isNotEmpty
-        ? totalTransferred / transfers.length
-        : 0.0;
+    final totalTransferred = _getTotalTransferred(transfers);
+    final averageTransfer = _getAverageTransfer(transfers);
+    final largestTransfer = _getLargestTransfer(transfers);
+    final isFiltered = selectedCompanyId.value != 'all';
+    final selectedCompany = controller.companies.firstWhereOrNull(
+      (c) => c.id == selectedCompanyId.value,
+    );
 
     return Container(
       margin: const EdgeInsets.all(16),
@@ -130,15 +272,15 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.purple.shade50,
-            Colors.purple.shade100.withOpacity(0.3),
+            AppConstants.primaryColor.withOpacity(0.05),
+            AppConstants.primaryColor.withOpacity(0.1),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.purple.shade200),
+        border: Border.all(color: AppConstants.borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.purple.withOpacity(0.1),
+            color: AppConstants.primaryColor.withOpacity(0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -151,12 +293,12 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(0.2),
+                  color: AppConstants.primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.swap_horiz,
-                  color: Colors.purple,
+                  color: AppConstants.primaryColor,
                   size: 24,
                 ),
               ),
@@ -165,22 +307,24 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Total Transferred',
+                    Text(
+                      isFiltered
+                          ? 'Partner Transfer Summary'
+                          : 'Total Transferred',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: Colors.grey,
+                        color: AppConstants.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Obx(
                       () => Text(
                         '${controller.currencySymbol}${totalTransferred.toStringAsFixed(2)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
-                          color: Colors.purple,
+                          color: AppConstants.primaryColor,
                         ),
                       ),
                     ),
@@ -190,12 +334,12 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Text(
+                  Text(
                     'Number of Transfers',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: Colors.grey,
+                      color: AppConstants.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -211,82 +355,222 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Divider(color: Colors.purple.shade200),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    const Text(
-                      'Average Transfer',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Obx(
-                      () => Text(
-                        '${controller.currencySymbol}${averageTransfer.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.purple,
+          if (isFiltered && selectedCompany != null) ...[
+            const SizedBox(height: 12),
+            Divider(color: AppConstants.borderColor),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        'Received',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: AppConstants.textSecondary,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  children: [
-                    const Text(
-                      'Largest Transfer',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Obx(
-                      () => Text(
-                        '${controller.currencySymbol}${_getLargestTransfer(transfers).toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.purple,
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppConstants.incomeColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Obx(
+                          () => Text(
+                            '${controller.currencySymbol}${_getIncomingAmount(transfers, selectedCompany.id).toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppConstants.incomeColor,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        'Sent',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: AppConstants.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppConstants.expenseColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Obx(
+                          () => Text(
+                            '${controller.currencySymbol}${_getOutgoingAmount(transfers, selectedCompany.id).toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppConstants.expenseColor,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        'Net',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: AppConstants.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppConstants.primaryColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Obx(() {
+                          final net =
+                              _getIncomingAmount(
+                                transfers,
+                                selectedCompany.id,
+                              ) -
+                              _getOutgoingAmount(transfers, selectedCompany.id);
+                          return Text(
+                            '${controller.currencySymbol}${net.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: net >= 0
+                                  ? AppConstants.incomeColor
+                                  : AppConstants.expenseColor,
+                            ),
+                          );
+                        }),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            Divider(color: AppConstants.borderColor),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        'Average Transfer',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppConstants.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Obx(
+                        () => Text(
+                          '${controller.currencySymbol}${averageTransfer.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppConstants.primaryColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        'Largest Transfer',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppConstants.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Obx(
+                        () => Text(
+                          '${controller.currencySymbol}${largestTransfer.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppConstants.primaryColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
 
-  double _getLargestTransfer(List<CompanyTransaction> transfers) {
-    if (transfers.isEmpty) return 0.0;
-    return transfers.map((t) => t.amount).reduce((a, b) => a > b ? a : b);
+  double _getIncomingAmount(
+    List<CompanyTransaction> transfers,
+    String companyId,
+  ) {
+    return transfers
+        .where((t) => t.companyId == companyId)
+        .fold(0.0, (sum, t) => sum + t.amount);
+  }
+
+  double _getOutgoingAmount(
+    List<CompanyTransaction> transfers,
+    String companyId,
+  ) {
+    return transfers
+        .where((t) => t.sourceCompanyId == companyId)
+        .fold(0.0, (sum, t) => sum + t.amount);
   }
 
   void _showInfoDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Row(
+        backgroundColor: AppConstants.cardColor,
+        title: Row(
           children: [
-            Icon(Icons.swap_horiz, color: Colors.purple),
-            SizedBox(width: 8),
-            Text('About Partner Transfers'),
+            Icon(Icons.swap_horiz, color: AppConstants.primaryColor),
+            const SizedBox(width: 8),
+            const Text(
+              'About Partner Transfers',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
           ],
         ),
         content: Column(
@@ -308,22 +592,22 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.purple.withOpacity(0.1),
+                color: AppConstants.primaryColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '💡 Tip:',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: Colors.purple,
+                      color: AppConstants.primaryColor,
                     ),
                   ),
-                  SizedBox(height: 4),
-                  Text(
-                    'You can edit or delete any transfer by tapping the edit/delete icons on each transfer card.',
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Use the filter chips above to view transfers for specific partners.',
                     style: TextStyle(fontSize: 12),
                   ),
                 ],
@@ -343,7 +627,7 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          const Icon(Icons.circle, size: 6, color: Colors.purple),
+          Icon(Icons.circle, size: 6, color: AppConstants.primaryColor),
           const SizedBox(width: 8),
           Expanded(child: Text(text)),
         ],
@@ -359,7 +643,6 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
       context: context,
       builder: (_) => EditPartnerTransferDialog(transfer: transfer),
     ).then((_) {
-      // Refresh the list after edit
       controller.refreshData();
     });
   }
@@ -371,6 +654,7 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
+        backgroundColor: AppConstants.cardColor,
         title: const Text('Delete Transfer'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -384,7 +668,7 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: AppConstants.surfaceColor,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -426,14 +710,14 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
               Get.snackbar(
                 'Deleted',
                 'Transfer deleted successfully',
-                backgroundColor: Colors.red,
+                backgroundColor: AppConstants.errorColor,
                 colorText: Colors.white,
                 snackPosition: SnackPosition.BOTTOM,
                 duration: const Duration(seconds: 2),
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: AppConstants.errorColor,
               foregroundColor: Colors.white,
             ),
             child: const Text('Delete'),
@@ -466,15 +750,15 @@ class _TransferCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppConstants.cardColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isOverdue ? Colors.red.shade200 : Colors.purple.shade200,
+          color: isOverdue ? AppConstants.errorColor : AppConstants.borderColor,
           width: isOverdue ? 1.5 : 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.shade100,
+            color: AppConstants.textSecondary.withOpacity(0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -496,13 +780,15 @@ class _TransferCard extends StatelessWidget {
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: isOverdue
-                            ? Colors.red.withOpacity(0.1)
-                            : Colors.purple.withOpacity(0.1),
+                            ? AppConstants.errorColor.withOpacity(0.1)
+                            : AppConstants.primaryColor.withOpacity(0.1),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.swap_horiz,
-                        color: isOverdue ? Colors.red : Colors.purple,
+                        color: isOverdue
+                            ? AppConstants.errorColor
+                            : AppConstants.primaryColor,
                         size: 22,
                       ),
                     ),
@@ -513,10 +799,10 @@ class _TransferCard extends StatelessWidget {
                         children: [
                           Text(
                             '${transfer.sourceCompanyName ?? "Unknown"} → ${transfer.companyName}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
-                              color: Colors.black87,
+                              color: AppConstants.textPrimary,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -525,7 +811,7 @@ class _TransferCard extends StatelessWidget {
                               Icon(
                                 Icons.access_time,
                                 size: 12,
-                                color: Colors.grey.shade500,
+                                color: AppConstants.textSecondary,
                               ),
                               const SizedBox(width: 4),
                               Text(
@@ -534,7 +820,7 @@ class _TransferCard extends StatelessWidget {
                                 ).format(transfer.date),
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.grey.shade600,
+                                  color: AppConstants.textSecondary,
                                 ),
                               ),
                             ],
@@ -551,10 +837,10 @@ class _TransferCard extends StatelessWidget {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: AppConstants.errorColor.withOpacity(0.1),
+                            color: AppConstants.expenseColor.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: AppConstants.errorColor.withOpacity(0.3),
+                              color: AppConstants.expenseColor.withOpacity(0.3),
                             ),
                           ),
                           child: Obx(
@@ -563,7 +849,7 @@ class _TransferCard extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w800,
-                                color: AppConstants.errorColor,
+                                color: AppConstants.expenseColor,
                               ),
                             ),
                           ),
@@ -576,23 +862,23 @@ class _TransferCard extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.1),
+                              color: AppConstants.errorColor.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
                                   Icons.warning_amber_rounded,
                                   size: 10,
-                                  color: Colors.red,
+                                  color: AppConstants.errorColor,
                                 ),
-                                SizedBox(width: 4),
+                                const SizedBox(width: 4),
                                 Text(
                                   'Overdue',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: Colors.red,
+                                    color: AppConstants.errorColor,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -608,7 +894,7 @@ class _TransferCard extends StatelessWidget {
                     transfer.paymentMethod != null ||
                     transfer.deadLine != null) ...[
                   const SizedBox(height: 12),
-                  const Divider(),
+                  Divider(color: AppConstants.borderColor),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -640,11 +926,11 @@ class _TransferCard extends StatelessWidget {
                       icon: Icon(
                         Icons.edit,
                         size: 18,
-                        color: Colors.grey.shade700,
+                        color: AppConstants.textSecondary,
                       ),
                       label: Text(
                         'Edit',
-                        style: TextStyle(color: Colors.grey.shade700),
+                        style: TextStyle(color: AppConstants.textSecondary),
                       ),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -656,11 +942,11 @@ class _TransferCard extends StatelessWidget {
                       icon: Icon(
                         Icons.delete,
                         size: 18,
-                        color: Colors.red.shade400,
+                        color: AppConstants.errorColor,
                       ),
                       label: Text(
                         'Delete',
-                        style: TextStyle(color: Colors.red.shade400),
+                        style: TextStyle(color: AppConstants.errorColor),
                       ),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -680,17 +966,17 @@ class _TransferCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: AppConstants.surfaceColor,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.grey.shade600),
+          Icon(icon, size: 14, color: AppConstants.textSecondary),
           const SizedBox(width: 6),
           Text(
             label,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
           ),
         ],
       ),
@@ -703,8 +989,8 @@ class _TransferCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: isOverdue
-            ? Colors.red.withOpacity(0.1)
-            : Colors.orange.withOpacity(0.1),
+            ? AppConstants.errorColor.withOpacity(0.1)
+            : AppConstants.primaryColor.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -713,7 +999,9 @@ class _TransferCard extends StatelessWidget {
           Icon(
             isOverdue ? Icons.warning_amber_rounded : Icons.event,
             size: 14,
-            color: isOverdue ? Colors.red : Colors.orange,
+            color: isOverdue
+                ? AppConstants.errorColor
+                : AppConstants.primaryColor,
           ),
           const SizedBox(width: 6),
           Text(
@@ -722,7 +1010,9 @@ class _TransferCard extends StatelessWidget {
                 : 'Deadline: ${DateFormat('dd MMM yyyy').format(deadline)}',
             style: TextStyle(
               fontSize: 12,
-              color: isOverdue ? Colors.red : Colors.orange,
+              color: isOverdue
+                  ? AppConstants.errorColor
+                  : AppConstants.primaryColor,
               fontWeight: isOverdue ? FontWeight.w600 : FontWeight.normal,
             ),
           ),
@@ -735,6 +1025,7 @@ class _TransferCard extends StatelessWidget {
     final controller = Get.find<DashboardController>();
     showModalBottomSheet(
       context: context,
+      backgroundColor: AppConstants.cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -749,7 +1040,7 @@ class _TransferCard extends StatelessWidget {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
+                  color: AppConstants.borderColor,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -760,12 +1051,12 @@ class _TransferCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.purple.withOpacity(0.1),
+                    color: AppConstants.primaryColor.withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.swap_horiz,
-                    color: Colors.purple,
+                    color: AppConstants.primaryColor,
                     size: 28,
                   ),
                 ),
@@ -787,7 +1078,7 @@ class _TransferCard extends StatelessWidget {
                         ).format(transfer.date),
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey.shade600,
+                          color: AppConstants.textSecondary,
                         ),
                       ),
                     ],
@@ -833,6 +1124,7 @@ class _TransferCard extends StatelessWidget {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
+                      side: BorderSide(color: AppConstants.borderColor),
                     ),
                   ),
                 ),
@@ -846,7 +1138,7 @@ class _TransferCard extends StatelessWidget {
                     icon: const Icon(Icons.delete),
                     label: const Text('Delete'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
+                      backgroundColor: AppConstants.errorColor,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
@@ -882,7 +1174,7 @@ class _TransferCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
+                color: AppConstants.textSecondary,
               ),
             ),
           ),
@@ -893,12 +1185,12 @@ class _TransferCard extends StatelessWidget {
                 fontSize: 14,
                 fontWeight: isAmount ? FontWeight.w800 : FontWeight.normal,
                 color: isAmount
-                    ? AppConstants.errorColor
+                    ? AppConstants.expenseColor
                     : isDeadline &&
                           transfer.deadLine != null &&
                           transfer.deadLine!.isBefore(DateTime.now())
-                    ? Colors.red
-                    : Colors.black87,
+                    ? AppConstants.errorColor
+                    : AppConstants.textPrimary,
               ),
             ),
           ),

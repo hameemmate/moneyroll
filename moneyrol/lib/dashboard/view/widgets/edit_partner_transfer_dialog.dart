@@ -86,12 +86,12 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.purple.withOpacity(0.1),
+                      color: AppConstants.primaryColor,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       Icons.edit,
-                      color: Colors.purple,
+                      color: Colors.white,
                       size: 24,
                     ),
                   ),
@@ -180,7 +180,7 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
                     child: ElevatedButton(
                       onPressed: _updateTransfer,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.purple,
+                        backgroundColor: AppConstants.primaryColor,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
@@ -206,46 +206,105 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.purple.withOpacity(0.05),
+        color: AppConstants.primaryColor.withOpacity(0.05),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.purple.withOpacity(0.2)),
+        border: Border.all(color: AppConstants.primaryColor.withOpacity(0.2)),
       ),
       child: Column(
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              /// FROM PARTNER
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'From Partner',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Colors.grey,
+                        color: AppConstants.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 8),
+
+                    /// DROPDOWN
                     Container(
+                      height: 45,
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppConstants.surfaceColor,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppConstants.borderColor),
                       ),
                       child: DropdownButtonFormField<String>(
                         value: selectedFromCompanyId,
+                        isExpanded: true,
+                        isDense: true,
                         decoration: const InputDecoration(
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                         ),
-                        hint: const Text('Select partner'),
+                        hint: Text(
+                          'Select partner',
+                          style: TextStyle(color: AppConstants.textSecondary),
+                        ),
                         items: fromCompanies.map((company) {
+                          final balance = controller.getCompanyBalance(
+                            company.id,
+                          );
                           return DropdownMenuItem<String>(
                             value: company.id,
-                            child: Text(company.name),
+                            child: SizedBox(
+                              height: 50,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    company.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppConstants.textPrimary,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Balance: ${controller.currencySymbol}${balance.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: balance >= 0
+                                          ? AppConstants.incomeColor
+                                          : AppConstants.expenseColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           );
                         }).toList(),
+                        selectedItemBuilder: (context) {
+                          return fromCompanies.map((company) {
+                            return Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                company.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppConstants.textPrimary,
+                                ),
+                              ),
+                            );
+                          }).toList();
+                        },
                         onChanged: (value) {
                           setState(() {
                             selectedFromCompanyId = value;
@@ -253,49 +312,98 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
                         },
                         validator: (value) {
                           if (value == null) return 'Required';
+                          if (value == selectedToCompanyId) {
+                            return 'Cannot transfer from and to same partner';
+                          }
                           return null;
                         },
                       ),
                     ),
+
+                    // Show current balance when a company is selected
+                    // Show current balance when a company is selected
                   ],
                 ),
               ),
+
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8),
-                child: Icon(Icons.arrow_forward, color: Colors.purple),
+                child: Icon(Icons.arrow_forward, size: 18),
               ),
+
+              /// TO PARTNER
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'To Partner',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Colors.grey,
+                        color: AppConstants.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 8),
+
                     Container(
+                      height: 45,
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppConstants.surfaceColor,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppConstants.borderColor),
                       ),
                       child: DropdownButtonFormField<String>(
                         value: selectedToCompanyId,
+                        isExpanded: true,
+                        isDense: true,
                         decoration: const InputDecoration(
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                         ),
-                        hint: const Text('Select partner'),
+                        hint: Text(
+                          'Select partner',
+                          style: TextStyle(color: AppConstants.textSecondary),
+                        ),
                         items: toCompanies.map((company) {
                           return DropdownMenuItem<String>(
                             value: company.id,
-                            child: Text(company.name),
+                            child: SizedBox(
+                              height: 40,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  company.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppConstants.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ),
                           );
                         }).toList(),
+                        selectedItemBuilder: (context) {
+                          return toCompanies.map((company) {
+                            return Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                company.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppConstants.textPrimary,
+                                ),
+                              ),
+                            );
+                          }).toList();
+                        },
                         onChanged: (value) {
                           setState(() {
                             selectedToCompanyId = value;
@@ -303,6 +411,9 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
                         },
                         validator: (value) {
                           if (value == null) return 'Required';
+                          if (value == selectedFromCompanyId) {
+                            return 'Cannot transfer to and from same partner';
+                          }
                           return null;
                         },
                       ),
@@ -311,6 +422,50 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
                 ),
               ),
             ],
+          ),
+          if (selectedFromCompanyId != null) const SizedBox(height: 8),
+          Container(
+            width: double.infinity, // Use full width instead of Get.width * .9
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppConstants.primaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.account_balance_wallet,
+                  size: 14,
+                  color: AppConstants.primaryColor,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  // Add Expanded to prevent overflow
+                  child: Text(
+                    'Current Balance: ',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppConstants.textSecondary,
+                    ),
+                  ),
+                ),
+                Obx(() {
+                  final balance = controller.getCompanyBalance(
+                    selectedFromCompanyId!,
+                  );
+                  return Text(
+                    '${controller.currencySymbol}${balance.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: balance >= 0
+                          ? AppConstants.incomeColor
+                          : AppConstants.expenseColor,
+                    ),
+                  );
+                }),
+              ],
+            ),
           ),
         ],
       ),
@@ -363,6 +518,26 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
               if (amount == null || amount <= 0) {
                 return 'Please enter a valid amount';
               }
+
+              // NEW: Check if source company has enough balance for this amount
+              if (selectedFromCompanyId != null) {
+                final sourceCompanyBalance = controller.getCompanyBalance(
+                  selectedFromCompanyId!,
+                );
+                final oldAmount = widget.transfer.amount;
+                final amountDifference = amount - oldAmount;
+
+                if (amountDifference > 0 &&
+                    sourceCompanyBalance < amountDifference) {
+                  final fromCompany = controller.companies.firstWhereOrNull(
+                    (c) => c.id == selectedFromCompanyId,
+                  );
+                  return 'Insufficient balance in ${fromCompany?.name ?? "source partner"}\n'
+                      'Available: ${controller.currencySymbol}${sourceCompanyBalance.toStringAsFixed(2)}\n'
+                      'Extra needed: ${controller.currencySymbol}${amountDifference.toStringAsFixed(2)}';
+                }
+              }
+
               return null;
             },
           ),
@@ -392,9 +567,15 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  DateFormat('dd MMM yyyy').format(selectedDate),
-                  style: const TextStyle(fontSize: 14),
+                SizedBox(
+                  width: Get.width * .18,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      DateFormat('dd MMM yyyy').format(selectedDate),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
                 ),
                 Icon(Icons.calendar_month, color: AppConstants.textSecondary),
               ],
@@ -527,7 +708,7 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(primary: Colors.purple),
+            colorScheme: ColorScheme.light(primary: AppConstants.primaryColor),
           ),
           child: child!,
         );
@@ -548,7 +729,7 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(primary: Colors.purple),
+            colorScheme: ColorScheme.light(primary: AppConstants.primaryColor),
           ),
           child: child!,
         );
@@ -571,7 +752,7 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(primary: Colors.purple),
+            colorScheme: ColorScheme.light(primary: AppConstants.primaryColor),
           ),
           child: child!,
         );
@@ -585,16 +766,54 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
     }
   }
 
-  void _updateTransfer() {
+  Future<void> _updateTransfer() async {
     if (_formKey.currentState!.validate() &&
         selectedFromCompanyId != null &&
         selectedToCompanyId != null) {
+      // Check if trying to transfer to the same company
+      if (selectedFromCompanyId == selectedToCompanyId) {
+        Get.snackbar(
+          'Invalid',
+          'Cannot transfer to the same partner',
+          backgroundColor: AppConstants.errorColor,
+          colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
+      }
+
       final fromCompany = controller.companies.firstWhere(
         (c) => c.id == selectedFromCompanyId,
       );
       final toCompany = controller.companies.firstWhere(
         (c) => c.id == selectedToCompanyId,
       );
+
+      final newAmount = double.parse(amountController.text.trim());
+      final oldAmount = widget.transfer.amount;
+      final amountDifference = newAmount - oldAmount;
+
+      // Get current balance of source company
+      double sourceCompanyBalance = controller.getCompanyBalance(
+        fromCompany.id,
+      );
+
+      if (amountDifference > 0) {
+        // Amount increased - need additional balance
+        if (sourceCompanyBalance < amountDifference) {
+          Get.snackbar(
+            'Insufficient Balance',
+            '${fromCompany.name} doesn\'t have enough balance.\n'
+                'Current balance: ${controller.currencySymbol}${sourceCompanyBalance.toStringAsFixed(2)}\n'
+                'Additional amount needed: ${controller.currencySymbol}${amountDifference.toStringAsFixed(2)}',
+            backgroundColor: AppConstants.errorColor,
+            colorText: Colors.white,
+            snackPosition: SnackPosition.BOTTOM,
+            duration: const Duration(seconds: 4),
+          );
+          return;
+        }
+      }
 
       final combinedDateTime = DateTime(
         selectedDate.year,
@@ -604,15 +823,24 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
         selectedTime.minute,
       );
 
-      // First delete the old transaction
-      controller.deleteCompanyTransaction(widget.transfer.id);
+      // Find the associated received transaction
+      final receivedTransaction = controller.companyTransactions
+          .firstWhereOrNull(
+            (t) =>
+                t.type == TransactionType.received &&
+                t.sourceCompanyId == widget.transfer.sourceCompanyId &&
+                t.companyId == widget.transfer.companyId &&
+                t.amount == widget.transfer.amount,
+          );
 
-      // Then create new updated transaction
-      controller.addCompanyTransaction(
+      // Update the sent transaction
+      final updatedSentTransaction = CompanyTransaction(
+        id: widget.transfer.id,
         companyId: toCompany.id,
-        amount: double.parse(amountController.text.trim()),
+        companyName: toCompany.name,
+        amount: newAmount,
         date: combinedDateTime,
-        deadline: selectedDeadline,
+        deadLine: selectedDeadline,
         type: TransactionType.sent,
         description: descriptionController.text.trim().isEmpty
             ? null
@@ -625,14 +853,69 @@ class _EditPartnerTransferDialogState extends State<EditPartnerTransferDialog> {
             : paymentMethodController.text.trim(),
         sourceType: SourceType.company,
         sourceCompanyId: fromCompany.id,
+        sourceCompanyName: fromCompany.name,
       );
+
+      // Update or create the received transaction
+      if (receivedTransaction != null) {
+        // Update existing received transaction
+        final updatedReceivedTransaction = CompanyTransaction(
+          id: receivedTransaction.id,
+          companyId: toCompany.id,
+          companyName: toCompany.name,
+          amount: newAmount,
+          date: combinedDateTime,
+          deadLine: selectedDeadline,
+          type: TransactionType.received,
+          description: descriptionController.text.trim().isEmpty
+              ? "Received from ${fromCompany.name}"
+              : descriptionController.text.trim(),
+          invoiceNumber: invoiceController.text.trim().isEmpty
+              ? null
+              : invoiceController.text.trim(),
+          paymentMethod: paymentMethodController.text.trim().isEmpty
+              ? null
+              : paymentMethodController.text.trim(),
+          sourceType: SourceType.company,
+          sourceCompanyId: fromCompany.id,
+          sourceCompanyName: fromCompany.name,
+        );
+        await controller.updateCompanyTransaction(updatedReceivedTransaction);
+      } else {
+        // Create new received transaction
+        final newReceivedTransaction = CompanyTransaction(
+          id: DateTime.now().millisecondsSinceEpoch.toString() + "_received",
+          companyId: toCompany.id,
+          companyName: toCompany.name,
+          amount: newAmount,
+          date: combinedDateTime,
+          deadLine: selectedDeadline,
+          type: TransactionType.received,
+          description: descriptionController.text.trim().isEmpty
+              ? "Received from ${fromCompany.name}"
+              : descriptionController.text.trim(),
+          invoiceNumber: invoiceController.text.trim().isEmpty
+              ? null
+              : invoiceController.text.trim(),
+          paymentMethod: paymentMethodController.text.trim().isEmpty
+              ? null
+              : paymentMethodController.text.trim(),
+          sourceType: SourceType.company,
+          sourceCompanyId: fromCompany.id,
+          sourceCompanyName: fromCompany.name,
+        );
+        await controller.addCompanyTransactionDirectly(newReceivedTransaction);
+      }
+
+      // Update the sent transaction
+      await controller.updateCompanyTransaction(updatedSentTransaction);
 
       Get.back();
 
       Get.snackbar(
         'Updated',
         'Partner transfer updated successfully',
-        backgroundColor: Colors.green,
+        backgroundColor: AppConstants.successColor,
         colorText: Colors.white,
         snackPosition: SnackPosition.BOTTOM,
         duration: const Duration(seconds: 2),

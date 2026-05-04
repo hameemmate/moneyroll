@@ -243,11 +243,38 @@ class DashboardController extends GetxController {
     String? description,
     String? invoiceNumber,
     String? paymentMethod,
+    SourceType? sourceType,
+    String? sourceCompanyId,
   }) async {
     final company = _companyBox.get(companyId);
     if (company == null) {
       _showErrorSnackbar('Company not found');
       return;
+    }
+
+    // Get the old transaction to find associated received transaction
+    final oldTransaction = companyTransactions.firstWhereOrNull(
+      (t) => t.id == id,
+    );
+
+    // If this is a company-to-company transfer, find and update the associated received transaction
+    if (oldTransaction != null &&
+        oldTransaction.type == TransactionType.sent &&
+        oldTransaction.sourceType == SourceType.company) {
+      // Find the associated received transaction
+      final receivedTransaction = companyTransactions.firstWhereOrNull(
+        (t) =>
+            t.type == TransactionType.received &&
+            t.sourceCompanyId == oldTransaction.sourceCompanyId &&
+            t.companyId == oldTransaction.companyId &&
+            t.amount == oldTransaction.amount,
+      );
+
+      // Delete the old received transaction
+      if (receivedTransaction != null) {
+        await _companyTransactionBox.delete(receivedTransaction.id);
+        companyTransactions.removeWhere((t) => t.id == receivedTransaction.id);
+      }
     }
 
     final transaction = CompanyTransaction(
@@ -261,15 +288,77 @@ class DashboardController extends GetxController {
       description: description,
       invoiceNumber: invoiceNumber,
       paymentMethod: paymentMethod,
+      sourceType: sourceType ?? oldTransaction?.sourceType ?? SourceType.normal,
+      sourceCompanyId: sourceCompanyId ?? oldTransaction?.sourceCompanyId,
+      sourceCompanyName: sourceCompanyId != null
+          ? _companyBox.get(sourceCompanyId)?.name
+          : oldTransaction?.sourceCompanyName,
     );
 
     await _companyTransactionBox.put(id, transaction);
     _updateCompanyTransactionInList(transaction);
+
+    // If this is a company-to-company transfer, create/update the associated received transaction
+    if (transaction.type == TransactionType.sent &&
+        transaction.sourceType == SourceType.company &&
+        transaction.sourceCompanyId != null) {
+      final sourceCompany = _companyBox.get(transaction.sourceCompanyId);
+      final receivedTransaction = CompanyTransaction(
+        id: "${id}_received",
+        companyId: companyId,
+        companyName: company.name,
+        amount: amount,
+        date: date,
+        deadLine: deadline,
+        type: TransactionType.received,
+        description: description != null
+            ? "Received from ${sourceCompany?.name}"
+            : "Transfer from ${sourceCompany?.name}",
+        invoiceNumber: invoiceNumber,
+        paymentMethod: paymentMethod,
+        sourceType: SourceType.company,
+        sourceCompanyId: transaction.sourceCompanyId,
+        sourceCompanyName: sourceCompany?.name,
+      );
+
+      await _companyTransactionBox.put(
+        receivedTransaction.id,
+        receivedTransaction,
+      );
+      companyTransactions.add(receivedTransaction);
+    }
+
     _calculateTotalAmount();
     _showCompanyTransactionSuccessSnackbar(type, company.name, isUpdate: true);
   }
 
   Future<void> deleteCompanyTransaction(String id) async {
+    // Get the transaction before deleting
+    final transaction = companyTransactions.firstWhereOrNull(
+      (ct) => ct.id == id,
+    );
+
+    // If this is a company-to-company transfer, also delete the associated received transaction
+    if (transaction != null &&
+        transaction.type == TransactionType.sent &&
+        transaction.sourceType == SourceType.company) {
+      // Find and delete the associated received transaction
+      final receivedTransaction = companyTransactions.firstWhereOrNull(
+        (t) =>
+            t.type == TransactionType.received &&
+            t.sourceCompanyId == transaction.sourceCompanyId &&
+            t.companyId == transaction.companyId &&
+            t.amount == transaction.amount,
+      );
+
+      if (receivedTransaction != null) {
+        await _companyTransactionBox.delete(receivedTransaction.id);
+        companyTransactions.removeWhere(
+          (ct) => ct.id == receivedTransaction.id,
+        );
+      }
+    }
+
     await _companyTransactionBox.delete(id);
     companyTransactions.removeWhere((ct) => ct.id == id);
     _calculateTotalAmount();
@@ -632,19 +721,22 @@ class DashboardController extends GetxController {
   }
 
   // Get company balance
+  // Get company balance (fixed to show actual balance)
   double getCompanyBalance(String companyId) {
     double balance = 0;
 
     for (var ct in companyTransactions) {
-      if (ct.companyId == companyId) {
-        if (ct.type == TransactionType.received) {
-          balance += ct.amount;
-        } else {
-          balance -= ct.amount;
-        }
+      // Money received by this company (adds to balance)
+      if (ct.companyId == companyId && ct.type == TransactionType.received) {
+        balance += ct.amount;
       }
-      // Track outgoing from this company
-      if (ct.sourceCompanyId == companyId && ct.type == TransactionType.sent) {
+      // Money sent FROM this company (subtracts from balance)
+      else if (ct.companyId == companyId && ct.type == TransactionType.sent) {
+        balance -= ct.amount;
+      }
+      // Money sent from this company as source (subtracts from balance)
+      else if (ct.sourceCompanyId == companyId &&
+          ct.type == TransactionType.sent) {
         balance -= ct.amount;
       }
     }
@@ -673,7 +765,7 @@ class DashboardController extends GetxController {
     return balance;
   }
 
-  // UPDATED: Add Company Transaction with source tracking
+  // UPDATED: Add Company Transaction with proper company-to-company tracking
   Future<void> addCompanyTransaction({
     required String companyId,
     required double amount,
@@ -728,6 +820,38 @@ class DashboardController extends GetxController {
 
     await _companyTransactionBox.put(transaction.id, transaction);
     companyTransactions.add(transaction);
+
+    // IMPORTANT: If this is a company-to-company transfer (sent from one company to another),
+    // we need to also create a "received" transaction for the destination company
+    if (type == TransactionType.sent &&
+        sourceType == SourceType.company &&
+        sourceCompanyId != null) {
+      // Create a received transaction for the destination company
+      final receivedTransaction = CompanyTransaction(
+        id: DateTime.now().millisecondsSinceEpoch.toString() + "_received",
+        companyId: companyId,
+        companyName: company.name,
+        amount: amount,
+        date: date,
+        deadLine: deadline,
+        type: TransactionType.received,
+        description: description != null
+            ? "Received from $sourceCompanyName"
+            : "Transfer from $sourceCompanyName",
+        invoiceNumber: invoiceNumber,
+        paymentMethod: paymentMethod,
+        sourceType: SourceType.company,
+        sourceCompanyId: sourceCompanyId,
+        sourceCompanyName: sourceCompanyName,
+      );
+
+      await _companyTransactionBox.put(
+        receivedTransaction.id,
+        receivedTransaction,
+      );
+      companyTransactions.add(receivedTransaction);
+    }
+
     _calculateTotalAmount();
 
     final sourceText = sourceType == SourceType.company
@@ -743,6 +867,7 @@ class DashboardController extends GetxController {
   }
 
   // Get company-to-company transactions
+  // Get company-to-company transactions (only the sent side, not both)
   List<CompanyTransaction> getCompanyToCompanyTransactions() {
     return companyTransactions
         .where(
@@ -787,5 +912,37 @@ class DashboardController extends GetxController {
     }
 
     _showSuccessSnackbar(message);
+  }
+
+  // Add this method to DashboardController
+  Future<void> addCompanyTransactionDirectly(
+    CompanyTransaction transaction,
+  ) async {
+    await _companyTransactionBox.put(transaction.id, transaction);
+    companyTransactions.add(transaction);
+    _calculateTotalAmount();
+    companyTransactions.refresh();
+    update();
+  }
+
+  // Update this method in DashboardController
+  Future<void> updateCompanyTransaction(CompanyTransaction transaction) async {
+    // Update in Hive
+    await _companyTransactionBox.put(transaction.id, transaction);
+
+    // Update in the observable list
+    final index = companyTransactions.indexWhere((t) => t.id == transaction.id);
+    if (index != -1) {
+      companyTransactions[index] = transaction;
+    } else {
+      companyTransactions.add(transaction);
+    }
+
+    // Recalculate totals
+    _calculateTotalAmount();
+
+    // Force refresh
+    companyTransactions.refresh();
+    update();
   }
 }

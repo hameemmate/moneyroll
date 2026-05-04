@@ -35,13 +35,36 @@ class HistoryScreen extends StatelessWidget {
           elevation: 1,
           iconTheme: const IconThemeData(color: Colors.black),
           actions: [
-            // Add this to the app bar actions or anywhere convenient
-            IconButton(
-              icon: const Icon(Icons.swap_horiz, color: Colors.purple),
-              onPressed: () {
-                Get.to(() => PartnerToPartnerTransfersScreen());
-              },
-              tooltip: 'Partner to Partner Transfers',
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              child: TextButton.icon(
+                onPressed: () {
+                  Get.to(() => PartnerToPartnerTransfersScreen());
+                },
+                icon: Icon(
+                  Icons.swap_horiz,
+                  color: AppConstants.cardColor,
+                  size: 18,
+                ),
+                label: Text(
+                  'Transfer History',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppConstants.backgroundColor,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  backgroundColor: AppConstants.primaryColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
             ),
           ],
         ),

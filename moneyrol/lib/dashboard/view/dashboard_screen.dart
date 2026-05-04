@@ -707,32 +707,32 @@ class DashboardScreen extends StatelessWidget {
                   },
                 ),
                 // NEW: Partner to Partner Transfer option
-                if (controller.companies.length >= 2)
-                  ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.purple.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.swap_horiz, color: Colors.purple),
-                    ),
-                    title: Text(
-                      'Partner to Partner Transfer',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: AppConstants.textPrimary,
-                      ),
-                    ),
-                    subtitle: Text('Transfer money between Partners'),
-                    onTap: () {
-                      Get.back();
-                      showDialog(
-                        context: context,
-                        builder: (context) => SendToCompanyDialog(),
-                      );
-                    },
-                  ),
+                // if (controller.companies.length >= 2)
+                //   ListTile(
+                //     leading: Container(
+                //       padding: const EdgeInsets.all(8),
+                //       decoration: BoxDecoration(
+                //         color: Colors.purple.withOpacity(0.1),
+                //         shape: BoxShape.circle,
+                //       ),
+                //       child: Icon(Icons.swap_horiz, color: Colors.purple),
+                //     ),
+                //     title: Text(
+                //       'Partner to Partner Transfer',
+                //       style: TextStyle(
+                //         fontWeight: FontWeight.w600,
+                //         color: AppConstants.textPrimary,
+                //       ),
+                //     ),
+                //     subtitle: Text('Transfer money between Partners'),
+                //     onTap: () {
+                //       Get.back();
+                //       showDialog(
+                //         context: context,
+                //         builder: (context) => SendToCompanyDialog(),
+                //       );
+                //     },
+                //   ),
                 const Divider(height: 20),
                 ListTile(
                   leading: Container(
