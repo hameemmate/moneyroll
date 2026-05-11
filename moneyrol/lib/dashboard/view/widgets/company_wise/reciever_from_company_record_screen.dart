@@ -651,6 +651,7 @@ class _ReceiveFromRecordDialogState extends State<ReceiveFromRecordDialog> {
   }
 
   // In receive_from_record_dialog.dart - update the _submit method
+  // In receive_from_record_dialog.dart - FIXED _submit method
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (selectedCompanyId == null) return;
@@ -670,12 +671,12 @@ class _ReceiveFromRecordDialogState extends State<ReceiveFromRecordDialog> {
 
     // Get the source company from the record label
     final sourceCompanyName = widget.recordLabel.split(' → ')[0];
-
-    // Find source company ID
     final sourceCompany = ctrl.companies.firstWhereOrNull(
       (c) => c.name == sourceCompanyName,
     );
 
+    // IMPORTANT: This is a COMPANY-TO-COMPANY receipt
+    // It should NOT affect the normal account at all
     final receipt = CompanyTransaction(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       companyId: company.id,
@@ -689,18 +690,18 @@ class _ReceiveFromRecordDialogState extends State<ReceiveFromRecordDialog> {
           ? null
           : invoiceCtrl.text.trim(),
       paymentMethod: selectedPaymentMethod,
-      sourceType: SourceType.company, // Mark as company source
-      sourceCompanyId: sourceCompany?.id, // Set source company ID
-      sourceCompanyName: sourceCompanyName, // Set source company name
-      recordId: widget.recordId, // ← links receipt to the record
+      sourceType: SourceType.company, // ← KEEP AS COMPANY
+      sourceCompanyId: sourceCompany?.id,
+      sourceCompanyName: sourceCompanyName,
+      recordId: widget.recordId,
     );
 
     await ctrl.addCompanyTransactionDirectly(receipt);
 
     Get.back();
     Get.snackbar(
-      'Payment Received',
-      'Payment from ${company.name} recorded successfully',
+      'Receipt Recorded',
+      'Receipt recorded from ${company.name} to this record',
       backgroundColor: AppConstants.successColor,
       colorText: Colors.white,
       snackPosition: SnackPosition.BOTTOM,

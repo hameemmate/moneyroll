@@ -18,225 +18,238 @@ class TransferRecordDetailSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final ctrl = Get.find<DashboardController>();
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.88,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, scrollCtrl) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppConstants.backgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            children: [
-              // Drag handle
-              Container(
-                margin: const EdgeInsets.only(top: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppConstants.borderColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+    return SafeArea(
+      top: false,
+      bottom: true,
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.88,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, scrollCtrl) {
+          return Container(
+            decoration: BoxDecoration(
+              color: AppConstants.backgroundColor,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
               ),
-
-              // Header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 14, 12, 4),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppConstants.primaryColor.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.folder_special_rounded,
-                        color: AppConstants.primaryColor,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Transfer Record',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: AppConstants.textPrimary,
-                            ),
-                          ),
-                          Text(
-                            '${rootTransfer.sourceCompanyName ?? "?"} → ${rootTransfer.companyName}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppConstants.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.close,
-                        color: AppConstants.textSecondary,
-                      ),
-                      onPressed: () => Get.back(),
-                    ),
-                  ],
+            ),
+            child: Column(
+              children: [
+                // Drag handle
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppConstants.borderColor,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ),
-              const Divider(height: 1),
 
-              // Main content
-              Expanded(
-                child: Obx(() {
-                  final recordId = rootTransfer.recordId ?? rootTransfer.id;
-                  final payments = ctrl.getPaymentsFromRecord(recordId);
-                  final receipts = ctrl.getReceiptsFromRecord(recordId);
-                  final originAmount = rootTransfer.amount;
-                  final totalPaid = payments.fold(0.0, (s, p) => s + p.amount);
-                  final totalReceived = receipts.fold(
-                    0.0,
-                    (s, r) => s + r.amount,
-                  );
-                  final remaining = originAmount - totalPaid;
-
-                  return ListView(
-                    controller: scrollCtrl,
-                    padding: const EdgeInsets.all(16),
+                // Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 12, 4),
+                  child: Row(
                     children: [
-                      // Balance Card
-                      _buildBalanceCard(
-                        ctrl,
-                        originAmount,
-                        totalPaid,
-                        totalReceived,
-                        remaining,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Origin Transfer Section
-                      _sectionLabel('Origin Transfer'),
-                      const SizedBox(height: 8),
-                      _buildOriginCard(ctrl),
-                      const SizedBox(height: 20),
-
-                      // Payments Section
-                      Row(
-                        children: [
-                          _sectionLabel('Payments From This Record'),
-                          const Spacer(),
-                          Text(
-                            '${payments.length} payment${payments.length == 1 ? '' : 's'}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppConstants.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      if (payments.isEmpty)
-                        _buildEmptyPayments('payments')
-                      else
-                        ...payments.map(
-                          (p) => _buildPaymentCard(ctrl, p, 'sent', recordId),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppConstants.primaryColor.withOpacity(0.1),
+                          shape: BoxShape.circle,
                         ),
-                      const SizedBox(height: 20),
-
-                      // Receipts Section
-                      Row(
-                        children: [
-                          _sectionLabel('Receipts From This Record'),
-                          const Spacer(),
-                          Text(
-                            '${receipts.length} receipt${receipts.length == 1 ? '' : 's'}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppConstants.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      if (receipts.isEmpty)
-                        _buildEmptyPayments('receipts')
-                      else
-                        ...receipts.map(
-                          (r) =>
-                              _buildPaymentCard(ctrl, r, 'received', recordId),
+                        child: Icon(
+                          Icons.folder_special_rounded,
+                          color: AppConstants.primaryColor,
+                          size: 22,
                         ),
-                      const SizedBox(height: 24),
-
-                      // Action Buttons
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () => _showPayDialog(
-                                context,
-                                recordId,
-                                remaining,
-                                ctrl,
-                              ),
-                              icon: const Icon(Icons.send_rounded, size: 18),
-                              label: const Text('Pay From Record'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppConstants.expenseColor,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () =>
-                                  _showReceiveDialog(context, recordId, ctrl),
-                              icon: const Icon(
-                                Icons.download_rounded,
-                                size: 18,
-                              ),
-                              label: const Text('Receive From Record'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppConstants.incomeColor,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
-                      const SizedBox(height: 16),
-
-                      // Status Message
-                      _buildStatusMessage(ctrl, remaining),
-                      const SizedBox(height: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Transfer Record',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: AppConstants.textPrimary,
+                              ),
+                            ),
+                            Text(
+                              '${rootTransfer.sourceCompanyName ?? "?"} → ${rootTransfer.companyName}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppConstants.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.close,
+                          color: AppConstants.textSecondary,
+                        ),
+                        onPressed: () => Get.back(),
+                      ),
                     ],
-                  );
-                }),
-              ),
-            ],
-          ),
-        );
-      },
+                  ),
+                ),
+                const Divider(height: 1),
+
+                // Main content
+                Expanded(
+                  child: Obx(() {
+                    final recordId = rootTransfer.recordId ?? rootTransfer.id;
+                    final payments = ctrl.getPaymentsFromRecord(recordId);
+                    final receipts = ctrl.getReceiptsFromRecord(recordId);
+                    final originAmount = rootTransfer.amount;
+                    final totalPaid = payments.fold(
+                      0.0,
+                      (s, p) => s + p.amount,
+                    );
+                    final totalReceived = receipts.fold(
+                      0.0,
+                      (s, r) => s + r.amount,
+                    );
+                    final remaining = originAmount - totalPaid;
+
+                    return ListView(
+                      controller: scrollCtrl,
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        // Balance Card
+                        _buildBalanceCard(
+                          ctrl,
+                          originAmount,
+                          totalPaid,
+                          totalReceived,
+                          remaining,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Origin Transfer Section
+                        _sectionLabel('Origin Transfer'),
+                        const SizedBox(height: 8),
+                        _buildOriginCard(ctrl),
+                        const SizedBox(height: 20),
+
+                        // Payments Section
+                        Row(
+                          children: [
+                            _sectionLabel('Payments From This Record'),
+                            const Spacer(),
+                            Text(
+                              '${payments.length} payment${payments.length == 1 ? '' : 's'}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppConstants.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        if (payments.isEmpty)
+                          _buildEmptyPayments('payments')
+                        else
+                          ...payments.map(
+                            (p) => _buildPaymentCard(ctrl, p, 'sent', recordId),
+                          ),
+                        const SizedBox(height: 20),
+
+                        // Receipts Section
+                        Row(
+                          children: [
+                            _sectionLabel('Receipts From This Record'),
+                            const Spacer(),
+                            Text(
+                              '${receipts.length} receipt${receipts.length == 1 ? '' : 's'}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppConstants.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        if (receipts.isEmpty)
+                          _buildEmptyPayments('receipts')
+                        else
+                          ...receipts.map(
+                            (r) => _buildPaymentCard(
+                              ctrl,
+                              r,
+                              'received',
+                              recordId,
+                            ),
+                          ),
+                        const SizedBox(height: 24),
+
+                        // Action Buttons
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => _showPayDialog(
+                                  context,
+                                  recordId,
+                                  remaining,
+                                  ctrl,
+                                ),
+                                icon: const Icon(Icons.send_rounded, size: 18),
+                                label: const Text('Pay From Record'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppConstants.expenseColor,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () =>
+                                    _showReceiveDialog(context, recordId, ctrl),
+                                icon: const Icon(
+                                  Icons.download_rounded,
+                                  size: 18,
+                                ),
+                                label: const Text('Receive From Record'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppConstants.incomeColor,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Status Message
+                        _buildStatusMessage(ctrl, remaining),
+                        const SizedBox(height: 24),
+                      ],
+                    );
+                  }),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -405,6 +418,14 @@ class TransferRecordDetailSheet extends StatelessWidget {
   }
 
   Widget _buildOriginCard(DashboardController ctrl) {
+    final hasLinkedTransactions =
+        ctrl
+            .getPaymentsFromRecord(rootTransfer.recordId ?? rootTransfer.id)
+            .isNotEmpty ||
+        ctrl
+            .getReceiptsFromRecord(rootTransfer.recordId ?? rootTransfer.id)
+            .isNotEmpty;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -458,6 +479,25 @@ class TransferRecordDetailSheet extends StatelessWidget {
                       color: AppConstants.textSecondary,
                     ),
                   ),
+                Container(
+                  margin: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppConstants.primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'Original Record • ${DateFormat('dd MMM yyyy').format(rootTransfer.date)}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppConstants.primaryColor,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -483,23 +523,25 @@ class TransferRecordDetailSheet extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              InkWell(
-                onTap: () => _deleteRootTransfer(ctrl),
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppConstants.errorColor.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.delete_outline,
-                    size: 18,
-                    color: AppConstants.errorColor,
+              // Only show delete button if there are no linked transactions
+              if (!hasLinkedTransactions) const SizedBox(width: 8),
+              if (!hasLinkedTransactions)
+                InkWell(
+                  onTap: () => _deleteRootTransfer(ctrl),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppConstants.errorColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: AppConstants.errorColor,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ],
@@ -537,6 +579,13 @@ class TransferRecordDetailSheet extends StatelessWidget {
     String recordId,
   ) {
     final bool isSent = type == 'sent';
+    final bool isRootTransfer = transaction.id == recordId;
+
+    // For root transfer, make it non-editable/non-deletable
+    if (isRootTransfer) {
+      return _buildRootTransferCard(ctrl, transaction);
+    }
+
     final Color color = isSent
         ? AppConstants.expenseColor
         : AppConstants.incomeColor;
@@ -679,6 +728,97 @@ class TransferRecordDetailSheet extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // Add this method to show root transfer as a non-editable card
+  Widget _buildRootTransferCard(
+    DashboardController ctrl,
+    CompanyTransaction transaction,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: AppConstants.cardColor.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppConstants.primaryColor.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppConstants.primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.folder_special_rounded,
+                color: AppConstants.primaryColor,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Original Transfer Record',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppConstants.primaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${transaction.sourceCompanyName ?? "?"} → ${transaction.companyName}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppConstants.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    DateFormat(
+                      'dd MMM yyyy • hh:mm a',
+                    ).format(transaction.date),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppConstants.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Obx(
+              () => Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppConstants.primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  '${ctrl.currencySymbol}${transaction.amount.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppConstants.primaryColor,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

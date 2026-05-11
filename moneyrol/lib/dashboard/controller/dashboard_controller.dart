@@ -126,16 +126,29 @@ class DashboardController extends GetxController {
   void _calculateTotalAmount() {
     double total = 0;
 
-    // Add normal transactions
+    // Add normal transactions (cash/bank deposits)
     for (var transaction in transactions) {
       total += transaction.amount;
     }
 
-    // Add company transactions
+    // Add company transactions - ONLY those that affect normal account
     for (var ct in companyTransactions) {
+      // Skip ALL company-to-company transactions (sourceType == company)
+      if (ct.sourceType == SourceType.company) {
+        continue; // These do NOT affect normal account
+      }
+
+      // Skip auto-created received entries
+      if (ct.id.endsWith('_received')) {
+        continue;
+      }
+
+      // Only process transactions that directly involve normal account
       if (ct.type == TransactionType.received) {
+        // Money received from company to normal account
         total += ct.amount;
-      } else {
+      } else if (ct.type == TransactionType.sent) {
+        // Money sent from normal account to company
         total -= ct.amount;
       }
     }
@@ -414,12 +427,31 @@ class DashboardController extends GetxController {
     final allCompanyTransactions = companyTransactions.toList();
 
     if (selectedCompanyId.value == 'all') {
-      allCompanyTransactions.sort((a, b) => b.date.compareTo(a.date));
-      return allCompanyTransactions;
+      // Filter out company-to-company transfers for the main list
+      final filtered = allCompanyTransactions
+          .where(
+            (ct) =>
+                ct.sourceType != SourceType.company || // Not company source
+                (ct.sourceType == SourceType.company &&
+                    ct.type !=
+                        TransactionType
+                            .sent), // Or if company source, not sent type
+          )
+          .toList();
+      filtered.sort((a, b) => b.date.compareTo(a.date));
+      return filtered;
     }
 
     final filtered = allCompanyTransactions
-        .where((ct) => ct.companyId == selectedCompanyId.value)
+        .where(
+          (ct) =>
+              ct.companyId == selectedCompanyId.value &&
+              (ct.sourceType != SourceType.company || // Not company source
+                  (ct.sourceType == SourceType.company &&
+                      ct.type !=
+                          TransactionType
+                              .sent)), // Or if company source, not sent type
+        )
         .toList();
 
     filtered.sort((a, b) => b.date.compareTo(a.date));
@@ -436,7 +468,10 @@ class DashboardController extends GetxController {
   }
 
   double getSelectedTotalReceived() {
+    // For normal section, ONLY count regular transactions
     if (selectedCompanyId.value == 'normal') {
+      // Only count transactions from the 'transactions' list (cash/bank deposits)
+      // Do NOT include any company transactions
       return transactions.fold(0.0, (sum, t) => sum + t.amount);
     }
 
@@ -450,12 +485,13 @@ class DashboardController extends GetxController {
         .where(
           (ct) =>
               ct.type == TransactionType.received &&
-              ct.sourceType != SourceType.company,
-        ) // ← ADD THIS
+              ct.sourceType != SourceType.company, // Exclude company-to-company
+        )
         .fold(0.0, (sum, ct) => sum + ct.amount);
   }
 
   double getSelectedTotalSent() {
+    // For normal section, return 0 (no sent transactions in normal view)
     if (selectedCompanyId.value == 'normal') return 0.0;
 
     final targetTransactions = selectedCompanyId.value == 'all'
@@ -468,8 +504,8 @@ class DashboardController extends GetxController {
         .where(
           (ct) =>
               ct.type == TransactionType.sent &&
-              ct.sourceType == SourceType.normal,
-        ) // ← ONLY normal-sourced sends
+              ct.sourceType == SourceType.normal, // Only from normal account
+        )
         .fold(0.0, (sum, ct) => sum + ct.amount);
   }
 
@@ -686,22 +722,25 @@ class DashboardController extends GetxController {
   }
 
   double getTotalReceivedFromCompanies() {
+    // Only count received transactions from company TO normal account (sourceType == normal)
     return companyTransactions
         .where(
           (ct) =>
               ct.type == TransactionType.received &&
-              ct.sourceType != SourceType.company,
-        ) // ← add this
+              ct.sourceType ==
+                  SourceType.normal, // Only normal account receives
+        )
         .fold(0.0, (sum, ct) => sum + ct.amount);
   }
 
   double getTotalSentToCompanies() {
+    // Only count sent transactions from normal account TO company (sourceType == normal)
     return companyTransactions
         .where(
           (ct) =>
               ct.type == TransactionType.sent &&
-              ct.sourceType == SourceType.normal,
-        ) // ← only normal-sourced sends
+              ct.sourceType == SourceType.normal, // Only normal account sends
+        )
         .fold(0.0, (sum, ct) => sum + ct.amount);
   }
 
@@ -774,18 +813,30 @@ class DashboardController extends GetxController {
     double balance = 0;
 
     for (var ct in companyTransactions) {
-      // Money received by this company (adds to balance)
-      if (ct.companyId == companyId && ct.type == TransactionType.received) {
-        balance += ct.amount;
-      }
-      // Money sent FROM this company (subtracts from balance)
-      else if (ct.companyId == companyId && ct.type == TransactionType.sent) {
-        balance -= ct.amount;
-      }
-      // Money sent from this company as source (subtracts from balance)
-      else if (ct.sourceCompanyId == companyId &&
-          ct.type == TransactionType.sent) {
-        balance -= ct.amount;
+      // Skip if not related to this company
+      if (ct.companyId != companyId && ct.sourceCompanyId != companyId)
+        continue;
+
+      // For company-to-company transactions, track the record balance
+      if (ct.sourceType == SourceType.company) {
+        // This is a company-to-company transaction
+        if (ct.companyId == companyId && ct.type == TransactionType.received) {
+          balance += ct.amount; // Company received money
+        } else if (ct.companyId == companyId &&
+            ct.type == TransactionType.sent) {
+          balance -= ct.amount; // Company sent money
+        } else if (ct.sourceCompanyId == companyId &&
+            ct.type == TransactionType.sent) {
+          balance -= ct.amount; // Company sent money as source
+        }
+      } else {
+        // This is normal account to company transaction
+        if (ct.companyId == companyId && ct.type == TransactionType.received) {
+          balance += ct.amount;
+        } else if (ct.companyId == companyId &&
+            ct.type == TransactionType.sent) {
+          balance -= ct.amount;
+        }
       }
     }
 
@@ -912,15 +963,18 @@ class DashboardController extends GetxController {
     );
   }
 
-  // Get company-to-company transactions
-  // Get company-to-company transactions (only the sent side, not both)
+  // Get company-to-company transactions (ONLY the root transfers, not payments from records)
+  // In DashboardController - UPDATE this method
   List<CompanyTransaction> getCompanyToCompanyTransactions() {
     return companyTransactions
         .where(
           (ct) =>
               ct.type == TransactionType.sent &&
               ct.sourceType == SourceType.company &&
-              ct.sourceCompanyId != null,
+              ct.sourceCompanyId != null &&
+              // Only include root transfers
+              ct.recordId == ct.id && // recordId matches its own ID
+              !ct.id.endsWith('_received'), // exclude auto-created entries
         )
         .toList();
   }
@@ -997,23 +1051,24 @@ class DashboardController extends GetxController {
     return companyTransactions
         .where(
           (ct) =>
-              ct.recordId == recordId && // linked to record
-              ct.id != recordId && // exclude the root transfer itself
-              !ct.id.endsWith('_received'),
-        ) // exclude auto-created received entries
+              ct.recordId == recordId && // linked to the record
+              ct.id != recordId && // NOT the root transfer itself
+              ct.type == TransactionType.sent &&
+              ct.sourceType == SourceType.company, // payments from records
+        )
         .toList()
       ..sort((a, b) => b.date.compareTo(a.date));
   }
 
   /// Returns all receipts received FROM a record (not the origin transfer itself)
-  /// Returns all receipts received FROM a record (not the origin transfer itself)
   List<CompanyTransaction> getReceiptsFromRecord(String recordId) {
     return companyTransactions
         .where(
           (ct) =>
-              ct.recordId == recordId && // linked to record
-              ct.id != recordId && // exclude the root transfer itself
-              ct.type == TransactionType.received, // only received transactions
+              ct.recordId == recordId && // linked to the record
+              ct.id != recordId && // NOT the root transfer itself
+              ct.type == TransactionType.received &&
+              ct.sourceType == SourceType.company, // receipts from records
         )
         .toList()
       ..sort((a, b) => b.date.compareTo(a.date));

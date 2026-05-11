@@ -486,6 +486,7 @@ class DashboardScreen extends StatelessWidget {
   Widget _buildIndividualList() {
     final List<TransactionItem> items = [];
 
+    // Add normal transactions
     for (var t in controller.transactions) {
       items.add(
         TransactionItem(
@@ -499,8 +500,11 @@ class DashboardScreen extends StatelessWidget {
       );
     }
 
+    // Add company transactions (both received and sent)
     for (var ct in controller.companyTransactions) {
+      // Skip company-to-company transactions if you want
       if (ct.sourceType == SourceType.company) continue;
+
       items.add(
         TransactionItem(
           type: ct.type == TransactionType.received ? 'Received' : 'Sent',
@@ -521,15 +525,9 @@ class DashboardScreen extends StatelessWidget {
   }
 
   Widget _buildPartnerTransfersList() {
-    final transfers =
-        controller.companyTransactions
-            .where(
-              (ct) =>
-                  ct.sourceType == SourceType.company &&
-                  ct.type == TransactionType.sent,
-            )
-            .toList()
-          ..sort((a, b) => b.date.compareTo(a.date));
+    // Get only company-to-company transfers (root transfers)
+    final transfers = controller.getCompanyToCompanyTransactions()
+      ..sort((a, b) => b.date.compareTo(a.date));
 
     if (transfers.isEmpty) {
       return _buildEmptyState();
@@ -542,45 +540,9 @@ class DashboardScreen extends StatelessWidget {
       itemBuilder: (context, index) {
         final ct = transfers[index];
 
-        // Determine if this is a payment FROM a record
-        // A payment is "from record" if:
-        // 1. It has a recordId that is NOT the same as its own ID (links to another record)
-        // 2. OR it has a recordId that exists as a company transaction
-        final bool isFromRecord =
-            ct.recordId != null &&
-            ct.recordId!.isNotEmpty &&
-            ct.recordId != ct.id;
-
-        // Get display names
+        // This is a direct company-to-company transfer (root record)
         final String fromName = ct.sourceCompanyName ?? 'Unknown';
         final String toName = ct.companyName;
-
-        // Create different subtitle based on type
-        String subtitle;
-        IconData leadingIcon;
-        String badgeText;
-        Color badgeColor;
-
-        if (isFromRecord) {
-          // This is a payment made FROM an existing transfer record
-          subtitle =
-              '📁 From Record • ${DateFormat('dd MMM yyyy').format(ct.date)}';
-          leadingIcon = Icons.folder_special_rounded;
-          badgeText = 'From Record';
-          badgeColor = Colors.purple;
-        } else {
-          // This is a direct company-to-company transfer
-          subtitle =
-              'Direct Transfer • ${DateFormat('dd MMM yyyy').format(ct.date)}';
-          leadingIcon = Icons.swap_horiz;
-          badgeText = 'Direct';
-          badgeColor = Colors.orange;
-        }
-
-        // Add extra info if available
-        if (ct.description != null && ct.description!.isNotEmpty) {
-          subtitle = '$subtitle\n${ct.description}';
-        }
 
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
@@ -597,7 +559,7 @@ class DashboardScreen extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.orange.withOpacity(0.3)),
               ),
-              child: Icon(leadingIcon, color: Colors.orange, size: 20),
+              child: Icon(Icons.swap_horiz, color: Colors.orange, size: 20),
             ),
             title: Row(
               children: [
@@ -619,14 +581,14 @@ class DashboardScreen extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: badgeColor.withOpacity(0.2),
+                    color: Colors.orange.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    badgeText,
+                    'Record',
                     style: TextStyle(
                       fontSize: 10,
-                      color: badgeColor,
+                      color: Colors.orange,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -634,14 +596,8 @@ class DashboardScreen extends StatelessWidget {
               ],
             ),
             subtitle: Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 12,
-                color: AppConstants.textSecondary,
-                height: 1.3,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              'Transfer • ${DateFormat('dd MMM yyyy').format(ct.date)}',
+              style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
             ),
             trailing: SizedBox(
               width: 110,
@@ -675,8 +631,6 @@ class DashboardScreen extends StatelessWidget {
               vertical: 8,
             ),
             onTap: () {
-              // For direct transfers, show the transfer detail sheet
-              // For payments from record, also show the detail sheet
               Get.bottomSheet(
                 TransferRecordDetailSheet(rootTransfer: ct),
                 isScrollControlled: true,

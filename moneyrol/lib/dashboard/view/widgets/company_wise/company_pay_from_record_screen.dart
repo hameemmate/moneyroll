@@ -647,7 +647,7 @@ class _PayFromRecordDialogState extends State<PayFromRecordDialog> {
     if (d != null) setState(() => selectedDeadline = d);
   }
 
-  // In pay_from_record_dialog.dart - update the _submit method
+  // In pay_from_record_dialog.dart - FIXED _submit method
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (selectedCompanyId == null) return;
@@ -666,14 +666,13 @@ class _PayFromRecordDialogState extends State<PayFromRecordDialog> {
     );
 
     // Get the source company from the record label
-    // The recordLabel format is "Partner A → Partner B"
     final sourceCompanyName = widget.recordLabel.split(' → ')[0];
-
-    // Find source company ID
     final sourceCompany = ctrl.companies.firstWhereOrNull(
       (c) => c.name == sourceCompanyName,
     );
 
+    // IMPORTANT: This is a COMPANY-TO-COMPANY payment
+    // It should NOT affect the normal account at all
     final payment = CompanyTransaction(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       companyId: company.id,
@@ -687,18 +686,18 @@ class _PayFromRecordDialogState extends State<PayFromRecordDialog> {
           ? null
           : invoiceCtrl.text.trim(),
       paymentMethod: selectedPaymentMethod,
-      sourceType: SourceType.company, // Mark as company source
-      sourceCompanyId: sourceCompany?.id, // Set source company ID
-      sourceCompanyName: sourceCompanyName, // Set source company name
-      recordId: widget.recordId, // ← links payment to the record
+      sourceType: SourceType.company, // ← KEEP AS COMPANY
+      sourceCompanyId: sourceCompany?.id,
+      sourceCompanyName: sourceCompanyName,
+      recordId: widget.recordId,
     );
 
     await ctrl.addCompanyTransactionDirectly(payment);
 
-    Get.back(); // close dialog
+    Get.back();
     Get.snackbar(
       'Payment Sent',
-      'Payment to ${company.name} recorded successfully',
+      'Payment from record to ${company.name} recorded',
       backgroundColor: AppConstants.successColor,
       colorText: Colors.white,
       snackPosition: SnackPosition.BOTTOM,

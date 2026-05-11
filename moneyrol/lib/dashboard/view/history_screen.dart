@@ -282,22 +282,31 @@ class HistoryScreen extends StatelessWidget {
     final transactions = controller.getFilteredCompanyTransactions().where((
       ct,
     ) {
-      // Hide auto-generated company-to-company received entries
-      if (ct.sourceType == SourceType.company) return false;
-      // Hide sent transactions that came from company source (partner-to-partner)
-      if (ct.type == TransactionType.sent && ct.sourceType != SourceType.normal)
-        return false;
+      // Skip auto-generated entries
+      if (ct.id.endsWith('_received')) return false;
+
+      // For History screen, only show transactions that involve normal account
+      // EXCLUDE all company-to-company transactions (sourceType == company)
+      if (ct.sourceType == SourceType.company) {
+        return false; // Company-to-company transfers go to PartnerToPartnerTransfersScreen
+      }
+
       return true;
     }).toList();
 
     return _buildTransactionList(
       transactions.map((ct) {
+        final isReceived = ct.type == TransactionType.received;
         return _TransactionCard(
-          title: ct.companyName,
-          subtitle: ct.description ?? 'No description',
+          title: isReceived
+              ? 'Received from ${ct.companyName}'
+              : 'Sent to ${ct.companyName}',
+          subtitle:
+              ct.description ??
+              (isReceived ? 'Income received' : 'Payment sent'),
           date: ct.date,
           amount: ct.amount,
-          isPositive: ct.type == TransactionType.received,
+          isPositive: isReceived,
           extraInfo: _buildCompanyExtraInfo(ct),
           onEdit: () => _showEditCompanyTransactionDialog(context, ct),
           onDelete: () => _showDeleteConfirmation(
@@ -314,11 +323,14 @@ class HistoryScreen extends StatelessWidget {
     String sourceInfo = '';
 
     if (ct.type == TransactionType.sent) {
+      // This is money going OUT from normal account to partner
+      sourceInfo = 'From: Normal Account → Partner • ';
+    } else if (ct.type == TransactionType.received) {
+      // This is money coming IN from partner to normal account
       if (ct.sourceType == SourceType.normal) {
-        sourceInfo = 'From: Normal Account • ';
-      } else if (ct.sourceType == SourceType.company &&
-          ct.sourceCompanyName != null) {
-        sourceInfo = 'From: ${ct.sourceCompanyName} • ';
+        sourceInfo = 'From: Partner → Normal Account • ';
+      } else {
+        sourceInfo = 'Received from Partner • ';
       }
     }
 

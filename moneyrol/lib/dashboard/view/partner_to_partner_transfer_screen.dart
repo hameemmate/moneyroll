@@ -77,12 +77,14 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
   }
 
   // ==================== FILTER LIST ====================
+  // ==================== FILTER LIST ====================
   Widget _buildCompanyFilterList() {
-    final companies = controller.companies;
+    // Get only root transfers
+    final rootTransfers = controller.getCompanyToCompanyTransactions();
 
-    // Get all unique companies involved in transfers
+    // Get all unique companies involved in root transfers
     final involvedCompanies = <String, String>{};
-    for (var transfer in controller.getCompanyToCompanyTransactions()) {
+    for (var transfer in rootTransfers) {
       involvedCompanies[transfer.companyId] = transfer.companyName;
       if (transfer.sourceCompanyId != null) {
         involvedCompanies[transfer.sourceCompanyId!] =
@@ -172,6 +174,7 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
 
   // ==================== FILTER LOGIC ====================
   List<CompanyTransaction> _getFilteredTransfers() {
+    // Get only root transfers (not payments from records)
     final allTransfers = controller.getCompanyToCompanyTransactions();
 
     if (selectedCompanyId.value == 'all') {
@@ -656,8 +659,12 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
 
     // Check if this transfer has any linked payments/receipts
     final recordId = transfer.recordId ?? transfer.id;
-    final linkedTransactions = controller.getPaymentsFromRecord(recordId);
-    final hasLinkedTransactions = linkedTransactions.isNotEmpty;
+    final linkedPayments = controller.getPaymentsFromRecord(recordId);
+    final linkedReceipts = controller.getReceiptsFromRecord(recordId);
+    final hasLinkedTransactions =
+        linkedPayments.isNotEmpty || linkedReceipts.isNotEmpty;
+
+    final linkedCount = linkedPayments.length + linkedReceipts.length;
 
     showDialog(
       context: context,
@@ -733,12 +740,29 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'This record has ${linkedTransactions.length} payment(s)/receipt(s) linked to it.',
+                      'This record has $linkedCount transaction(s) linked to it:',
                       style: TextStyle(
                         fontSize: 12,
                         color: AppConstants.errorColor,
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    if (linkedPayments.isNotEmpty)
+                      Text(
+                        '• ${linkedPayments.length} payment(s)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppConstants.errorColor,
+                        ),
+                      ),
+                    if (linkedReceipts.isNotEmpty)
+                      Text(
+                        '• ${linkedReceipts.length} receipt(s)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppConstants.errorColor,
+                        ),
+                      ),
                     const SizedBox(height: 4),
                     Text(
                       'Deleting this record will also delete ALL linked transactions.',
@@ -771,7 +795,7 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
               Get.snackbar(
                 'Deleted',
                 hasLinkedTransactions
-                    ? 'Transfer and ${linkedTransactions.length} linked transaction(s) deleted successfully'
+                    ? 'Transfer and $linkedCount linked transaction(s) deleted successfully'
                     : 'Transfer deleted successfully',
                 backgroundColor: AppConstants.errorColor,
                 colorText: Colors.white,
