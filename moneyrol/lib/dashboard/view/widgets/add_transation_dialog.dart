@@ -581,6 +581,9 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   }
 
   void _addTransaction() {
+    if (Get.isSnackbarOpen) Get.closeCurrentSnackbar();
+    if (Get.isDialogOpen ?? false) Get.back();
+    if (Get.isBottomSheetOpen ?? false) Get.back();
     if (_formKey.currentState!.validate()) {
       // Combine date and time
       final combinedDateTime = DateTime(
@@ -607,15 +610,6 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       );
 
       Get.back();
-
-      // Show success message
-      Get.snackbar(
-        'Success',
-        'Amount added successfully',
-        backgroundColor: AppConstants.successColor,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-      );
     }
   }
 

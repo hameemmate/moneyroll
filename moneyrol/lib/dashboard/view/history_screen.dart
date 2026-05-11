@@ -28,7 +28,7 @@ class HistoryScreen extends StatelessWidget {
         backgroundColor: AppConstants.backgroundColor,
         appBar: AppBar(
           title: const Text(
-            'Transaction History',
+            ' History',
             style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
           ),
           backgroundColor: Colors.white,
@@ -47,7 +47,7 @@ class HistoryScreen extends StatelessWidget {
                   size: 18,
                 ),
                 label: Text(
-                  'Transfer History',
+                  'Partner to Partner',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -279,7 +279,16 @@ class HistoryScreen extends StatelessWidget {
   }
 
   Widget _buildCompanyTransactionsList(BuildContext context) {
-    final transactions = controller.getFilteredCompanyTransactions();
+    final transactions = controller.getFilteredCompanyTransactions().where((
+      ct,
+    ) {
+      // Hide auto-generated company-to-company received entries
+      if (ct.sourceType == SourceType.company) return false;
+      // Hide sent transactions that came from company source (partner-to-partner)
+      if (ct.type == TransactionType.sent && ct.sourceType != SourceType.normal)
+        return false;
+      return true;
+    }).toList();
 
     return _buildTransactionList(
       transactions.map((ct) {

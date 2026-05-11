@@ -5,7 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:moneyrol/constants/app_constants.dart';
 import 'package:moneyrol/dashboard/controller/dashboard_controller.dart';
 import 'package:moneyrol/dashboard/model/company_transation_model.dart';
-import 'package:moneyrol/dashboard/view/widgets/edit_partner_transfer_dialog.dart';
+import 'package:moneyrol/dashboard/view/widgets/company_wise/company_tranfer_record_details_screen.dart';
+import 'package:moneyrol/dashboard/view/widgets/company_wise/edit_partner_transfer_dialog.dart';
 
 class PartnerToPartnerTransfersScreen extends StatelessWidget {
   PartnerToPartnerTransfersScreen({super.key});
@@ -651,6 +652,13 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
     BuildContext context,
     CompanyTransaction transfer,
   ) {
+    final controller = Get.find<DashboardController>();
+
+    // Check if this transfer has any linked payments/receipts
+    final recordId = transfer.recordId ?? transfer.id;
+    final linkedTransactions = controller.getPaymentsFromRecord(recordId);
+    final hasLinkedTransactions = linkedTransactions.isNotEmpty;
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -692,6 +700,59 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
+            if (hasLinkedTransactions) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppConstants.errorColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppConstants.errorColor.withOpacity(0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          size: 16,
+                          color: AppConstants.errorColor,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Linked Transactions Found!',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppConstants.errorColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This record has ${linkedTransactions.length} payment(s)/receipt(s) linked to it.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppConstants.errorColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Deleting this record will also delete ALL linked transactions.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: AppConstants.errorColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             const Text(
               'This action cannot be undone.',
               style: TextStyle(color: Colors.red, fontSize: 12),
@@ -709,11 +770,13 @@ class PartnerToPartnerTransfersScreen extends StatelessWidget {
               Get.back();
               Get.snackbar(
                 'Deleted',
-                'Transfer deleted successfully',
+                hasLinkedTransactions
+                    ? 'Transfer and ${linkedTransactions.length} linked transaction(s) deleted successfully'
+                    : 'Transfer deleted successfully',
                 backgroundColor: AppConstants.errorColor,
                 colorText: Colors.white,
                 snackPosition: SnackPosition.BOTTOM,
-                duration: const Duration(seconds: 2),
+                duration: const Duration(seconds: 3),
               );
             },
             style: ElevatedButton.styleFrom(
@@ -767,7 +830,12 @@ class _TransferCard extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => _showTransferDetails(context),
+          onTap: () => showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => TransferRecordDetailSheet(rootTransfer: transfer),
+          ),
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.all(16),

@@ -1,4 +1,4 @@
-// company_transation_model.dart - UPDATED
+// company_transation_model.dart - UPDATED with recordId
 import 'package:hive/hive.dart';
 
 // TransactionType enum (keep this)
@@ -39,7 +39,7 @@ class SourceTypeAdapter extends TypeAdapter<SourceType> {
   }
 }
 
-// CompanyTransactionAdapter - UPDATED
+// CompanyTransactionAdapter - UPDATED (14 fields now, added recordId at index 13)
 class CompanyTransactionAdapter extends TypeAdapter<CompanyTransaction> {
   @override
   final int typeId = 3;
@@ -71,13 +71,14 @@ class CompanyTransactionAdapter extends TypeAdapter<CompanyTransaction> {
           : SourceType.normal,
       sourceCompanyId: fields[11] as String?,
       sourceCompanyName: fields[12] as String?,
+      recordId: fields[13] as String?, // ← NEW
     );
   }
 
   @override
   void write(BinaryWriter writer, CompanyTransaction obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(14) // ← was 13, now 14
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -103,7 +104,9 @@ class CompanyTransactionAdapter extends TypeAdapter<CompanyTransaction> {
       ..writeByte(11)
       ..write(obj.sourceCompanyId)
       ..writeByte(12)
-      ..write(obj.sourceCompanyName);
+      ..write(obj.sourceCompanyName)
+      ..writeByte(13)
+      ..write(obj.recordId); // ← NEW
   }
 }
 
@@ -122,6 +125,7 @@ class CompanyTransaction {
   final SourceType sourceType;
   final String? sourceCompanyId;
   final String? sourceCompanyName;
+  final String? recordId; // ← NEW: groups payments under one record
 
   CompanyTransaction({
     required this.id,
@@ -137,6 +141,7 @@ class CompanyTransaction {
     this.sourceType = SourceType.normal,
     this.sourceCompanyId,
     this.sourceCompanyName,
+    this.recordId, // ← NEW
   });
 
   Map<String, dynamic> toJson() {
@@ -154,6 +159,7 @@ class CompanyTransaction {
       'sourceType': sourceType.index,
       'sourceCompanyId': sourceCompanyId,
       'sourceCompanyName': sourceCompanyName,
+      'recordId': recordId, // ← NEW
     };
   }
 
@@ -176,6 +182,7 @@ class CompanyTransaction {
           : SourceType.normal,
       sourceCompanyId: json['sourceCompanyId'],
       sourceCompanyName: json['sourceCompanyName'],
+      recordId: json['recordId'], // ← NEW
     );
   }
 }

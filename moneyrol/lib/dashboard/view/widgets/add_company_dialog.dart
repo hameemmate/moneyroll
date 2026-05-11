@@ -230,6 +230,9 @@ class _AddCompanyDialogState extends State<AddCompanyDialog> {
   }
 
   void _addPartner() {
+    if (Get.isSnackbarOpen) Get.closeCurrentSnackbar();
+    if (Get.isDialogOpen ?? false) Get.back();
+    if (Get.isBottomSheetOpen ?? false) Get.back();
     if (_formKey.currentState!.validate()) {
       controller.addCompany(
         name: nameController.text.trim(),
@@ -244,15 +247,6 @@ class _AddCompanyDialogState extends State<AddCompanyDialog> {
             : phoneController.text.trim(),
       );
       Get.back();
-
-      // Show success message
-      Get.snackbar(
-        'Success',
-        'Partner added successfully',
-        backgroundColor: AppConstants.successColor,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-      );
     }
   }
 

@@ -22,14 +22,21 @@ class _AddCompanyTransactionDialogState
   final _formKey = GlobalKey<FormState>();
 
   String? selectedCompanyId;
+  String? selectedPaymentMethod;
   TextEditingController amountController = TextEditingController();
   TextEditingController descriptionController = TextEditingController();
   TextEditingController invoiceController = TextEditingController();
-  TextEditingController paymentMethodController = TextEditingController();
   TextEditingController deadlineController = TextEditingController();
   DateTime? selectedDeadline;
   DateTime selectedDate = DateTime.now();
   TimeOfDay selectedTime = TimeOfDay.now();
+
+  // Payment method options
+  final List<Map<String, dynamic>> paymentMethods = [
+    {'name': 'Cash', 'icon': Icons.money_rounded},
+    {'name': 'Card', 'icon': Icons.credit_card_rounded},
+    {'name': 'Bank Transfer', 'icon': Icons.account_balance_rounded},
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -142,13 +149,8 @@ class _AddCompanyTransactionDialogState
                     ),
                     const SizedBox(height: 16),
 
-                    // Payment Method
-                    _buildTextField(
-                      controller: paymentMethodController,
-                      label: 'Payment Method',
-                      hint: 'Cash, Bank Transfer, etc. (optional)',
-                      icon: Icons.payment_rounded,
-                    ),
+                    // Payment Method (Dropdown)
+                    _buildPaymentMethodField(),
                   ],
                 ),
               ),
@@ -237,6 +239,84 @@ class _AddCompanyTransactionDialogState
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPaymentMethodField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Payment Method',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppConstants.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppConstants.borderColor),
+          ),
+          child: DropdownButtonFormField<String>(
+            value: selectedPaymentMethod,
+            isExpanded: true,
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              prefixIcon: Icon(
+                Icons.payment_rounded,
+                color: AppConstants.textSecondary,
+              ),
+            ),
+            style: TextStyle(fontSize: 16, color: AppConstants.textPrimary),
+            dropdownColor: AppConstants.backgroundColor,
+            icon: Icon(
+              Icons.arrow_drop_down,
+              color: AppConstants.textSecondary,
+            ),
+            hint: Text(
+              'Select payment method',
+              style: TextStyle(
+                color: AppConstants.textSecondary.withOpacity(0.6),
+                fontSize: 16,
+              ),
+            ),
+            items: paymentMethods.map((method) {
+              return DropdownMenuItem<String>(
+                value: method['name'],
+                child: Row(
+                  children: [
+                    Icon(
+                      method['icon'],
+                      color: AppConstants.primaryColor,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      method['name'],
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: AppConstants.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                selectedPaymentMethod = value;
+              });
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -662,6 +742,9 @@ class _AddCompanyTransactionDialogState
   }
 
   void _submitTransaction() {
+    if (Get.isSnackbarOpen) Get.closeCurrentSnackbar();
+    if (Get.isDialogOpen ?? false) Get.back();
+    if (Get.isBottomSheetOpen ?? false) Get.back();
     if (_formKey.currentState!.validate() && selectedCompanyId != null) {
       // Combine date and time
       final combinedDateTime = DateTime(
@@ -684,21 +767,10 @@ class _AddCompanyTransactionDialogState
         invoiceNumber: invoiceController.text.trim().isEmpty
             ? null
             : invoiceController.text.trim(),
-        paymentMethod: paymentMethodController.text.trim().isEmpty
-            ? null
-            : paymentMethodController.text.trim(),
+        paymentMethod: selectedPaymentMethod,
       );
 
       Get.back();
-
-      // Show success message
-      Get.snackbar(
-        'Success',
-        'Transaction added successfully',
-        backgroundColor: AppConstants.successColor,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-      );
     }
   }
 
@@ -707,7 +779,6 @@ class _AddCompanyTransactionDialogState
     amountController.dispose();
     descriptionController.dispose();
     invoiceController.dispose();
-    paymentMethodController.dispose();
     super.dispose();
   }
 }

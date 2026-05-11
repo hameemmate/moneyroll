@@ -26,6 +26,7 @@ class DashboardController extends GetxController {
     HiveConstants.currencyBox,
   );
   final Box _settingsBox = Hive.box(HiveConstants.settingsBox);
+  final RxBool showCompanyView = false.obs;
 
   // ==================== Observable Variables ====================
   final RxList<Company> companies = <Company>[].obs;
@@ -338,11 +339,27 @@ class DashboardController extends GetxController {
       (ct) => ct.id == id,
     );
 
-    // If this is a company-to-company transfer, also delete the associated received transaction
-    if (transaction != null &&
-        transaction.type == TransactionType.sent &&
-        transaction.sourceType == SourceType.company) {
-      // Find and delete the associated received transaction
+    if (transaction == null) return;
+
+    // CASE 1: If this is a root transfer record (company-to-company transfer)
+    if (transaction.type == TransactionType.sent &&
+        transaction.sourceType == SourceType.company &&
+        transaction.sourceCompanyId != null) {
+      // Find and delete ALL associated transactions (payments & receipts) linked to this record
+      final recordId = transaction.recordId ?? transaction.id;
+
+      // Get all transactions linked to this record
+      final linkedTransactions = companyTransactions
+          .where((ct) => ct.recordId == recordId && ct.id != transaction.id)
+          .toList();
+
+      // Delete all linked transactions
+      for (var linked in linkedTransactions) {
+        await _companyTransactionBox.delete(linked.id);
+        companyTransactions.removeWhere((ct) => ct.id == linked.id);
+      }
+
+      // Also find and delete the associated received transaction (the auto-created one)
       final receivedTransaction = companyTransactions.firstWhereOrNull(
         (t) =>
             t.type == TransactionType.received &&
@@ -357,11 +374,28 @@ class DashboardController extends GetxController {
           (ct) => ct.id == receivedTransaction.id,
         );
       }
+
+      // Finally delete the root transaction itself
+      await _companyTransactionBox.delete(id);
+      companyTransactions.removeWhere((ct) => ct.id == id);
+    }
+    // CASE 2: If this is a payment/receipt from a record (not the root)
+    else if (transaction.recordId != null &&
+        transaction.recordId != transaction.id &&
+        !transaction.id.endsWith('_received')) {
+      // Just delete this single transaction (keep the root record)
+      await _companyTransactionBox.delete(id);
+      companyTransactions.removeWhere((ct) => ct.id == id);
+    }
+    // CASE 3: Regular transaction (not linked to any record)
+    else {
+      await _companyTransactionBox.delete(id);
+      companyTransactions.removeWhere((ct) => ct.id == id);
     }
 
-    await _companyTransactionBox.delete(id);
-    companyTransactions.removeWhere((ct) => ct.id == id);
     _calculateTotalAmount();
+    companyTransactions.refresh();
+    update();
   }
 
   void _updateCompanyTransactionInList(CompanyTransaction transaction) {
@@ -413,14 +447,16 @@ class DashboardController extends GetxController {
           );
 
     return targetTransactions
-        .where((ct) => ct.type == TransactionType.received)
+        .where(
+          (ct) =>
+              ct.type == TransactionType.received &&
+              ct.sourceType != SourceType.company,
+        ) // ← ADD THIS
         .fold(0.0, (sum, ct) => sum + ct.amount);
   }
 
   double getSelectedTotalSent() {
-    if (selectedCompanyId.value == 'normal') {
-      return 0.0;
-    }
+    if (selectedCompanyId.value == 'normal') return 0.0;
 
     final targetTransactions = selectedCompanyId.value == 'all'
         ? companyTransactions
@@ -429,7 +465,11 @@ class DashboardController extends GetxController {
           );
 
     return targetTransactions
-        .where((ct) => ct.type == TransactionType.sent)
+        .where(
+          (ct) =>
+              ct.type == TransactionType.sent &&
+              ct.sourceType == SourceType.normal,
+        ) // ← ONLY normal-sourced sends
         .fold(0.0, (sum, ct) => sum + ct.amount);
   }
 
@@ -647,13 +687,21 @@ class DashboardController extends GetxController {
 
   double getTotalReceivedFromCompanies() {
     return companyTransactions
-        .where((ct) => ct.type == TransactionType.received)
+        .where(
+          (ct) =>
+              ct.type == TransactionType.received &&
+              ct.sourceType != SourceType.company,
+        ) // ← add this
         .fold(0.0, (sum, ct) => sum + ct.amount);
   }
 
   double getTotalSentToCompanies() {
     return companyTransactions
-        .where((ct) => ct.type == TransactionType.sent)
+        .where(
+          (ct) =>
+              ct.type == TransactionType.sent &&
+              ct.sourceType == SourceType.normal,
+        ) // ← only normal-sourced sends
         .fold(0.0, (sum, ct) => sum + ct.amount);
   }
 
@@ -766,6 +814,7 @@ class DashboardController extends GetxController {
   }
 
   // UPDATED: Add Company Transaction with proper company-to-company tracking
+  // Update addCompanyTransaction method in DashboardController
   Future<void> addCompanyTransaction({
     required String companyId,
     required double amount,
@@ -784,26 +833,23 @@ class DashboardController extends GetxController {
       return;
     }
 
-    // For sent transactions, check if source has enough money
-    if (type == TransactionType.sent) {
-      if (!canSendMoney(
-        amount: amount,
-        sourceType: sourceType,
-        sourceCompanyId: sourceCompanyId,
-      )) {
-        _showErrorSnackbar('Insufficient balance in source account');
-        return;
-      }
-    }
-
     String? sourceCompanyName;
     if (sourceType == SourceType.company && sourceCompanyId != null) {
       final sourceCompany = _companyBox.get(sourceCompanyId);
       sourceCompanyName = sourceCompany?.name;
     }
 
+    final transactionId = DateTime.now().millisecondsSinceEpoch.toString();
+
+    // For direct transfers, recordId is the same as the transaction ID (no link to another record)
+    // For payments from record, recordId will be set by the dialog
+    final String recordId =
+        (sourceType == SourceType.company && sourceCompanyId != null)
+        ? transactionId // Direct company-to-company transfer
+        : transactionId; // Regular transaction
+
     final transaction = CompanyTransaction(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: transactionId,
       companyId: companyId,
       companyName: company.name,
       amount: amount,
@@ -816,19 +862,19 @@ class DashboardController extends GetxController {
       sourceType: sourceType,
       sourceCompanyId: sourceCompanyId,
       sourceCompanyName: sourceCompanyName,
+      recordId: recordId, // For direct transfers, this is the same as id
     );
 
     await _companyTransactionBox.put(transaction.id, transaction);
     companyTransactions.add(transaction);
 
-    // IMPORTANT: If this is a company-to-company transfer (sent from one company to another),
-    // we need to also create a "received" transaction for the destination company
+    // For company-to-company transfers, create the received transaction
     if (type == TransactionType.sent &&
         sourceType == SourceType.company &&
         sourceCompanyId != null) {
-      // Create a received transaction for the destination company
       final receivedTransaction = CompanyTransaction(
-        id: DateTime.now().millisecondsSinceEpoch.toString() + "_received",
+        id: "${transactionId}_received",
+        recordId: recordId, // Link to the same record
         companyId: companyId,
         companyName: company.name,
         amount: amount,
@@ -944,5 +990,32 @@ class DashboardController extends GetxController {
     // Force refresh
     companyTransactions.refresh();
     update();
+  }
+
+  /// Returns all payments made FROM a record (not the origin transfer itself)
+  List<CompanyTransaction> getPaymentsFromRecord(String recordId) {
+    return companyTransactions
+        .where(
+          (ct) =>
+              ct.recordId == recordId && // linked to record
+              ct.id != recordId && // exclude the root transfer itself
+              !ct.id.endsWith('_received'),
+        ) // exclude auto-created received entries
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  /// Returns all receipts received FROM a record (not the origin transfer itself)
+  /// Returns all receipts received FROM a record (not the origin transfer itself)
+  List<CompanyTransaction> getReceiptsFromRecord(String recordId) {
+    return companyTransactions
+        .where(
+          (ct) =>
+              ct.recordId == recordId && // linked to record
+              ct.id != recordId && // exclude the root transfer itself
+              ct.type == TransactionType.received, // only received transactions
+        )
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
   }
 }

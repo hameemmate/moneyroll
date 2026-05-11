@@ -23,15 +23,22 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
 
   String? selectedCompanyId;
   String? selectedSourceCompanyId;
+  String? selectedPaymentMethod;
   SourceType selectedSourceType = SourceType.normal;
   TextEditingController amountController = TextEditingController();
   TextEditingController descriptionController = TextEditingController();
   TextEditingController invoiceController = TextEditingController();
-  TextEditingController paymentMethodController = TextEditingController();
   TextEditingController deadlineController = TextEditingController();
   DateTime? selectedDeadline;
   DateTime selectedDate = DateTime.now();
   TimeOfDay selectedTime = TimeOfDay.now();
+
+  // Payment method options
+  final List<Map<String, dynamic>> paymentMethods = [
+    {'name': 'Cash', 'icon': Icons.money_rounded},
+    {'name': 'Card', 'icon': Icons.credit_card_rounded},
+    {'name': 'Bank Transfer', 'icon': Icons.account_balance_rounded},
+  ];
 
   @override
   void initState() {
@@ -138,12 +145,7 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
                       icon: Icons.receipt_long_rounded,
                     ),
                     const SizedBox(height: 16),
-                    _buildTextField(
-                      controller: paymentMethodController,
-                      label: 'Payment Method',
-                      hint: 'Cash, Bank Transfer, etc. (optional)',
-                      icon: Icons.payment_rounded,
-                    ),
+                    _buildPaymentMethodField(),
                   ],
                 ),
               ),
@@ -205,7 +207,7 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
-                        _submitTransaction(paymentMethodController);
+                        _submitTransaction();
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppConstants.expenseColor,
@@ -233,8 +235,87 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
     );
   }
 
+  Widget _buildPaymentMethodField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Payment Method',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppConstants.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppConstants.borderColor),
+          ),
+          child: DropdownButtonFormField<String>(
+            value: selectedPaymentMethod,
+            isExpanded: true,
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
+              prefixIcon: Icon(
+                Icons.payment_rounded,
+                size: 18,
+                color: AppConstants.textSecondary,
+              ),
+            ),
+            style: TextStyle(fontSize: 14, color: AppConstants.textPrimary),
+            dropdownColor: AppConstants.backgroundColor,
+            icon: Icon(
+              Icons.arrow_drop_down,
+              color: AppConstants.textSecondary,
+              size: 20,
+            ),
+            hint: Text(
+              'Select payment method',
+              style: TextStyle(
+                color: AppConstants.textSecondary.withOpacity(0.6),
+                fontSize: 13,
+              ),
+            ),
+            items: paymentMethods.map((method) {
+              return DropdownMenuItem<String>(
+                value: method['name'],
+                child: Row(
+                  children: [
+                    Icon(
+                      method['icon'],
+                      color: AppConstants.primaryColor,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      method['name'],
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppConstants.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                selectedPaymentMethod = value;
+              });
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildTargetCompanyDropdown() {
-    // Get available companies (excluding the source company if partner source is selected)
     List<Company> availableCompanies = controller.companies;
 
     if (selectedSourceType == SourceType.company &&
@@ -331,7 +412,6 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
               if (value == null || value.isEmpty) {
                 return 'Please select a partner';
               }
-              // Check if trying to send to the same partner from partner account
               if (selectedSourceType == SourceType.company &&
                   selectedSourceCompanyId != null &&
                   value == selectedSourceCompanyId) {
@@ -346,7 +426,6 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
   }
 
   Widget _buildSourceSelection() {
-    // Get available source companies (excluding the target company)
     List<Company> availableSourceCompanies = controller.companies;
 
     if (selectedCompanyId != null) {
@@ -381,12 +460,10 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
         const SizedBox(height: 8),
         Column(
           children: [
-            // Normal Account Option
             _buildSourceCard(
               label: 'Normal Account',
               type: SourceType.normal,
               icon: Icons.account_balance_wallet,
-              balance: controller.getNormalBalance(),
               isSelected: selectedSourceType == SourceType.normal,
               onTap: () {
                 setState(() {
@@ -396,7 +473,6 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
               },
             ),
             const SizedBox(height: 12),
-            // Partner Account Option (only show if there are available partners)
             if (availableSourceCompanies.isNotEmpty)
               _buildPartnerSourceCard(availableSourceCompanies),
           ],
@@ -409,7 +485,6 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
     required String label,
     required SourceType type,
     required IconData icon,
-    required double balance,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
@@ -449,48 +524,14 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
               ),
             ),
             const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected
-                          ? AppConstants.primaryColor
-                          : AppConstants.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Available Balance',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: AppConstants.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: balance >= 0
-                    ? AppConstants.incomeColor.withOpacity(0.1)
-                    : AppConstants.expenseColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${controller.currencySymbol}${balance.toStringAsFixed(2)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: balance >= 0
-                      ? AppConstants.incomeColor
-                      : AppConstants.expenseColor,
-                ),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isSelected
+                    ? AppConstants.primaryColor
+                    : AppConstants.textPrimary,
               ),
             ),
           ],
@@ -517,7 +558,6 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
       ),
       child: Column(
         children: [
-          // Header with radio style
           InkWell(
             onTap: () {
               if (availableCompanies.isNotEmpty) {
@@ -587,7 +627,6 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
               ),
             ),
           ),
-          // Dropdown for selecting partner (only shown when this option is selected)
           if (isSelected) ...[
             const Divider(height: 1, indent: 48),
             Padding(
@@ -628,54 +667,22 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
                         ),
                       ),
                       items: availableCompanies.map((company) {
-                        final balance = controller.getCompanyBalance(
-                          company.id,
-                        );
                         return DropdownMenuItem<String>(
                           value: company.id,
-                          child: SizedBox(
-                            height: 50,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  company.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                Text(
-                                  'Balance: ${controller.currencySymbol}${balance.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: balance >= 0
-                                        ? AppConstants.incomeColor
-                                        : AppConstants.expenseColor,
-                                  ),
-                                ),
-                              ],
+                          child: Text(
+                            company.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         );
                       }).toList(),
-                      selectedItemBuilder: (context) {
-                        return availableCompanies.map((company) {
-                          return Text(
-                            company.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 13),
-                          );
-                        }).toList();
-                      },
                       onChanged: (value) {
                         setState(() {
                           selectedSourceCompanyId = value;
-                          // Reset target company if it's the same as source
                           if (selectedCompanyId == value) {
                             selectedCompanyId = null;
                           }
@@ -769,26 +776,13 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
               if (amount == null || amount <= 0) {
                 return 'Please enter a valid amount';
               }
-
-              // Check if source has enough balance
-              if (selectedSourceType == SourceType.normal) {
-                final normalBalance = controller.getNormalBalance();
-                if (amount > normalBalance) {
-                  return 'Insufficient balance in normal account\nAvailable: ${controller.currencySymbol}${normalBalance.toStringAsFixed(2)}';
-                }
-              } else if (selectedSourceType == SourceType.company &&
-                  selectedSourceCompanyId != null) {
-                final companyBalance = controller.getCompanyBalance(
-                  selectedSourceCompanyId!,
-                );
-                if (amount > companyBalance) {
-                  final company = controller.companies.firstWhereOrNull(
-                    (c) => c.id == selectedSourceCompanyId,
-                  );
-                  return 'Insufficient balance in ${company?.name ?? "partner"}\nAvailable: ${controller.currencySymbol}${companyBalance.toStringAsFixed(2)}';
-                }
-              }
-
+              // // Only check balance for normal account
+              // if (selectedSourceType == SourceType.normal) {
+              //   final normalBalance = controller.getNormalBalance();
+              //   if (amount > normalBalance) {
+              //     return 'Insufficient balance in normal account\nAvailable: ${controller.currencySymbol}${normalBalance.toStringAsFixed(2)}';
+              //   }
+              // }
               return null;
             },
           ),
@@ -1002,11 +996,8 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
         );
       },
     );
-
     if (date != null) {
-      setState(() {
-        selectedDate = date;
-      });
+      setState(() => selectedDate = date);
     }
   }
 
@@ -1023,11 +1014,8 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
         );
       },
     );
-
     if (time != null) {
-      setState(() {
-        selectedTime = time;
-      });
+      setState(() => selectedTime = time);
     }
   }
 
@@ -1046,11 +1034,8 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
         );
       },
     );
-
     if (date != null) {
-      setState(() {
-        selectedDeadline = date;
-      });
+      setState(() => selectedDeadline = date);
     }
   }
 
@@ -1071,10 +1056,10 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
     });
   }
 
-  void _submitTransaction(TextEditingController paymentController) {
-    // Additional validation before submission
+  void _submitTransaction() {
+    if (Get.isSnackbarOpen) Get.closeCurrentSnackbar();
+
     if (_formKey.currentState!.validate() && selectedCompanyId != null) {
-      // Check if sending from partner account to same partner
       if (selectedSourceType == SourceType.company &&
           selectedSourceCompanyId != null &&
           selectedSourceCompanyId == selectedCompanyId) {
@@ -1108,9 +1093,7 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
         invoiceNumber: invoiceController.text.trim().isEmpty
             ? null
             : invoiceController.text.trim(),
-        paymentMethod: paymentController.text.trim().isEmpty
-            ? null
-            : paymentController.text.trim(),
+        paymentMethod: selectedPaymentMethod,
         sourceType: selectedSourceType,
         sourceCompanyId: selectedSourceCompanyId,
       );
@@ -1132,7 +1115,6 @@ class _SendToCompanyDialogState extends State<SendToCompanyDialog> {
     amountController.dispose();
     descriptionController.dispose();
     invoiceController.dispose();
-    paymentMethodController.dispose();
     super.dispose();
   }
 }
