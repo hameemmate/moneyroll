@@ -6,7 +6,9 @@ import 'package:moneyrol/constants/app_constants.dart';
 import 'package:moneyrol/dashboard/controller/dashboard_controller.dart';
 import 'package:moneyrol/dashboard/model/company_model.dart';
 import 'package:moneyrol/dashboard/model/company_transation_model.dart';
+import 'package:moneyrol/dashboard/model/payment_entry_model.dart';
 import 'package:moneyrol/dashboard/model/transation_model.dart';
+import 'package:moneyrol/dashboard/view/widgets/add_payment_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/edit_company_transation_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/edit_transation_dialog.dart';
 
@@ -227,10 +229,13 @@ class HistoryScreen extends StatelessWidget {
     return _buildTransactionList(
       transactions.map((t) {
         return _TransactionCard(
+          displayId: t.displayId,
+          parentId: t.id,
           title: t.description ?? 'Cash Received',
           subtitle: t.source ?? 'No source',
           date: t.date,
           amount: t.amount,
+          currentAmount: controller.getCurrentAmount(t.id),
           isPositive: true,
           extraInfo:
               '${t.isCash ? 'Cash' : 'Bank'} • Ref: ${t.referenceNumber ?? 'N/A'}',
@@ -238,6 +243,12 @@ class HistoryScreen extends StatelessWidget {
           onDelete: () => _showDeleteConfirmation(
             context,
             () => controller.deleteTransaction(t.id),
+          ),
+          onPay: () => _openPayDialog(
+            context,
+            toType: PartyType.transaction,
+            toId: t.id,
+            toName: t.displayId ?? t.description ?? 'Transaction',
           ),
         );
       }).toList(),
@@ -250,10 +261,13 @@ class HistoryScreen extends StatelessWidget {
     return _buildTransactionList(
       transactions.map((ct) {
         return _TransactionCard(
+          displayId: ct.displayId,
+          parentId: ct.id,
           title: ct.companyName,
           subtitle: ct.description ?? 'No description',
           date: ct.date,
           amount: ct.amount,
+          currentAmount: controller.getCurrentAmount(ct.id),
           isPositive: ct.type == TransactionType.received,
           extraInfo: _buildCompanyExtraInfo(ct),
           onEdit: () => _showEditCompanyTransactionDialog(context, ct),
@@ -261,8 +275,28 @@ class HistoryScreen extends StatelessWidget {
             context,
             () => controller.deleteCompanyTransaction(ct.id),
           ),
+          onPay: () => _openPayDialog(
+            context,
+            toType: PartyType.transaction,
+            toId: ct.id,
+            toName: ct.displayId ?? ct.companyName,
+          ),
         );
       }).toList(),
+    );
+  }
+
+  void _openPayDialog(
+    BuildContext context, {
+    required PartyType toType,
+    required String? toId,
+    required String toName,
+  }) {
+    showDialog(
+      context: context,
+      builder: (_) => AddPaymentDialog(
+        prefilledTo: PartySelection(type: toType, id: toId, name: toName),
+      ),
     );
   }
 
@@ -374,7 +408,7 @@ class HistoryScreen extends StatelessWidget {
 
 // ================= TRANSACTION CARD =================
 
-class _TransactionCard extends StatelessWidget {
+class _TransactionCard extends StatefulWidget {
   const _TransactionCard({
     required this.title,
     required this.subtitle,
@@ -384,6 +418,10 @@ class _TransactionCard extends StatelessWidget {
     required this.onDelete,
     required this.onEdit,
     required this.extraInfo,
+    this.displayId,
+    this.parentId,
+    this.currentAmount,
+    this.onPay,
   });
 
   final String title;
@@ -394,14 +432,37 @@ class _TransactionCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onEdit;
   final String extraInfo;
+  // New optional fields for the payment-ledger features.
+  final String? displayId;
+  final String? parentId;
+  final double? currentAmount;
+  final VoidCallback? onPay;
+
+  @override
+  State<_TransactionCard> createState() => _TransactionCardState();
+}
+
+class _TransactionCardState extends State<_TransactionCard> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
-    final isOverdue = extraInfo.contains('Overdue');
+    final isOverdue = widget.extraInfo.contains('Overdue');
     final controller = Get.find<DashboardController>();
-    final amountColor = isPositive
+    final amountColor = widget.isPositive
         ? Colors.green.shade600
         : Colors.red.shade600;
+
+    // Linked payments for this transaction (may be empty).
+    final List<PaymentEntry> linkedPayments = widget.parentId == null
+        ? const []
+        : controller.getPaymentsForTransaction(widget.parentId!);
+    final hasPayments = linkedPayments.isNotEmpty;
+
+    // Show the current/remaining balance only when it actually differs from
+    // the original — otherwise the row stays clean.
+    final showCurrent = widget.currentAmount != null &&
+        (widget.currentAmount! - widget.amount).abs() > 0.005;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -427,8 +488,31 @@ class _TransactionCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (widget.displayId != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Text(
+                          widget.displayId!,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey.shade800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                    ],
                     Text(
-                      title,
+                      widget.title,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -437,7 +521,7 @@ class _TransactionCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      subtitle,
+                      widget.subtitle,
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey.shade700,
@@ -448,14 +532,24 @@ class _TransactionCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (widget.onPay != null)
+                IconButton(
+                  icon: Icon(
+                    Icons.swap_horiz_rounded,
+                    color: Colors.indigo.shade600,
+                  ),
+                  tooltip: 'Pay / Transfer',
+                  onPressed: widget.onPay,
+                  splashRadius: 20,
+                ),
               IconButton(
                 icon: Icon(Icons.edit, color: Colors.grey.shade700),
-                onPressed: onEdit,
+                onPressed: widget.onEdit,
                 splashRadius: 20,
               ),
               IconButton(
                 icon: Icon(Icons.delete, color: Colors.grey.shade700),
-                onPressed: onDelete,
+                onPressed: widget.onDelete,
                 splashRadius: 20,
               ),
             ],
@@ -465,7 +559,7 @@ class _TransactionCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                DateFormat('dd MMM yyyy • hh:mm a').format(date),
+                DateFormat('dd MMM yyyy • hh:mm a').format(widget.date),
                 style: TextStyle(
                   fontSize: 13,
                   color: Colors.grey.shade600,
@@ -483,9 +577,9 @@ class _TransactionCard extends StatelessWidget {
                   border: Border.all(color: amountColor.withOpacity(0.3)),
                 ),
                 child: Text(
-                  '${isPositive ? '+' : '-'}'
+                  '${widget.isPositive ? '+' : '-'}'
                   '${controller.selectedCurrency.value.symbol}'
-                  '${amount.toStringAsFixed(2)}',
+                  '${widget.amount.toStringAsFixed(2)}',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -495,17 +589,215 @@ class _TransactionCard extends StatelessWidget {
               ),
             ],
           ),
+          if (showCurrent) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.indigo.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.indigo.shade100),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.account_balance_wallet_outlined,
+                        size: 14,
+                        color: Colors.indigo.shade700,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Current balance',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.indigo.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    controller.formatAmount(widget.currentAmount!),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.indigo.shade800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Divider(color: Colors.grey.shade200, height: 1),
           const SizedBox(height: 8),
-
           Text(
-            extraInfo,
+            widget.extraInfo,
             style: TextStyle(
               fontSize: 13,
               color: isOverdue ? Colors.red.shade600 : Colors.grey.shade600,
               fontWeight: isOverdue ? FontWeight.w600 : FontWeight.normal,
             ),
+          ),
+          if (hasPayments) ...[
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () => setState(() => _expanded = !_expanded),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      _expanded
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded,
+                      size: 18,
+                      color: Colors.indigo.shade700,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Linked payments (${linkedPayments.length})',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.indigo.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_expanded)
+              Column(
+                children: linkedPayments
+                    .map((p) => _PaymentRow(payment: p, parentId: widget.parentId!))
+                    .toList(),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// Single row in the linked-payments expansion. Shows direction relative to
+// the parent transaction so the user instantly knows whether this payment
+// added to or subtracted from the parent's balance.
+class _PaymentRow extends StatelessWidget {
+  const _PaymentRow({required this.payment, required this.parentId});
+
+  final PaymentEntry payment;
+  final String parentId;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.find<DashboardController>();
+    final isParentIncoming =
+        payment.toType == PartyType.transaction && payment.toId == parentId;
+    final isParentOutgoing =
+        payment.fromType == PartyType.transaction && payment.fromId == parentId;
+    final color = isParentIncoming
+        ? Colors.green.shade700
+        : (isParentOutgoing ? Colors.red.shade700 : Colors.grey.shade700);
+    final sign = isParentIncoming ? '+' : (isParentOutgoing ? '-' : '');
+
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (payment.displayId != null) ...[
+                Text(
+                  payment.displayId!,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.grey.shade700,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(
+                  '${payment.fromName} → ${payment.toName}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade800,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                '$sign${controller.formatAmount(payment.amount)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () => _confirmDelete(context, controller, payment.id),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${DateFormat('dd MMM yyyy • hh:mm a').format(payment.date)}'
+            '${payment.paymentMethod != null ? ' • ${payment.paymentMethod}' : ''}'
+            '${payment.description != null && payment.description!.isNotEmpty ? ' • ${payment.description}' : ''}',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete(
+    BuildContext context,
+    DashboardController controller,
+    String id,
+  ) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete Payment'),
+        content: const Text(
+          'Remove this linked payment? The parent transaction\'s balance will recalculate.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: Get.back,
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              controller.deletePayment(id);
+              Get.back();
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:hive_flutter/adapters.dart';
 import 'package:moneyrol/constants/app_constants.dart';
 import 'package:moneyrol/dashboard/model/company_transation_model.dart';
+import 'package:moneyrol/dashboard/model/payment_entry_model.dart';
 import 'package:moneyrol/dashboard/model/transation_model.dart';
 import '../model/company_model.dart';
 import '../model/currency_model.dart';
@@ -25,6 +26,9 @@ class DashboardController extends GetxController {
   final Box<Currency> _currencyBox = Hive.box<Currency>(
     HiveConstants.currencyBox,
   );
+  final Box<PaymentEntry> _paymentEntryBox = Hive.box<PaymentEntry>(
+    HiveConstants.paymentEntryBox,
+  );
   final Box _settingsBox = Hive.box(HiveConstants.settingsBox);
 
   // ==================== Observable Variables ====================
@@ -32,6 +36,7 @@ class DashboardController extends GetxController {
   final RxList<Transaction> transactions = <Transaction>[].obs;
   final RxList<CompanyTransaction> companyTransactions =
       <CompanyTransaction>[].obs;
+  final RxList<PaymentEntry> payments = <PaymentEntry>[].obs;
   final RxDouble totalAmount = 0.0.obs;
   final Rx<Currency> selectedCurrency = Currency(
     symbol: '₹',
@@ -40,6 +45,11 @@ class DashboardController extends GetxController {
     imagePath: 'assets/images/rupee.png',
   ).obs;
   final RxString selectedCompanyId = 'all'.obs;
+
+  // ==================== Display-ID Counter Keys (in settings box) ====================
+  static const String _kTxnCounter = 'counter_txn';
+  static const String _kCompCounter = 'counter_comp';
+  static const String _kPayCounter = 'counter_pay';
 
   // ==================== Constants & Configuration ====================
   List<Currency> availableCurrencies = [
@@ -85,7 +95,53 @@ class DashboardController extends GetxController {
   void _initializeApp() {
     _initializeCurrency();
     _loadAllData();
+    _backfillDisplayIds();
     _calculateTotalAmount();
+  }
+
+  // ==================== Display-ID Generation ====================
+  // Atomic-ish counter increment using Hive settings box.
+  int _nextCounter(String key) {
+    final int current = (_settingsBox.get(key) as int?) ?? 0;
+    final int next = current + 1;
+    _settingsBox.put(key, next);
+    return next;
+  }
+
+  String _formatId(String prefix, int n) =>
+      '$prefix-${n.toString().padLeft(4, '0')}';
+
+  String generateTxnDisplayId() => _formatId('TXN', _nextCounter(_kTxnCounter));
+  String generateCompanyTxnDisplayId() =>
+      _formatId('COMP', _nextCounter(_kCompCounter));
+  String generatePaymentDisplayId() =>
+      _formatId('PAY', _nextCounter(_kPayCounter));
+
+  // One-time pass that gives any pre-existing record without a displayId
+  // a freshly minted one, so older data also shows readable IDs.
+  void _backfillDisplayIds() {
+    bool changed = false;
+
+    for (final t in _transactionBox.values.toList()) {
+      if (t.displayId == null || t.displayId!.isEmpty) {
+        final updated = t.copyWith(displayId: generateTxnDisplayId());
+        _transactionBox.put(updated.id, updated);
+        changed = true;
+      }
+    }
+
+    for (final ct in _companyTransactionBox.values.toList()) {
+      if (ct.displayId == null || ct.displayId!.isEmpty) {
+        final updated = ct.copyWith(displayId: generateCompanyTxnDisplayId());
+        _companyTransactionBox.put(updated.id, updated);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      transactions.value = _transactionBox.values.toList();
+      companyTransactions.value = _companyTransactionBox.values.toList();
+    }
   }
 
   // ==================== Currency Management ====================
@@ -120,6 +176,7 @@ class DashboardController extends GetxController {
     companies.value = _companyBox.values.toList();
     transactions.value = _transactionBox.values.toList();
     companyTransactions.value = _companyTransactionBox.values.toList();
+    payments.value = _paymentEntryBox.values.toList();
   }
 
   void _calculateTotalAmount() {
@@ -153,6 +210,7 @@ class DashboardController extends GetxController {
   }) async {
     final transaction = Transaction(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
+      displayId: generateTxnDisplayId(),
       amount: amount,
       date: date,
       description: description,
@@ -164,7 +222,7 @@ class DashboardController extends GetxController {
     await _transactionBox.put(transaction.id, transaction);
     transactions.add(transaction);
     _calculateTotalAmount();
-    _showSuccessSnackbar('Transaction added successfully');
+    // Snackbar is shown by the calling dialog so we don't double-fire here.
   }
 
   Future<void> editTransaction({
@@ -176,8 +234,11 @@ class DashboardController extends GetxController {
     bool isCash = true,
     String? referenceNumber,
   }) async {
+    // Preserve existing displayId so editing doesn't break the readable id.
+    final existing = _transactionBox.get(id);
     final transaction = Transaction(
       id: id,
+      displayId: existing?.displayId ?? generateTxnDisplayId(),
       amount: amount,
       date: date,
       description: description,
@@ -189,12 +250,15 @@ class DashboardController extends GetxController {
     await _transactionBox.put(id, transaction);
     _updateTransactionInList(transaction);
     _calculateTotalAmount();
-    _showSuccessSnackbar('Transaction updated successfully');
+    // Snackbar shown by caller — see addTransaction note.
   }
 
   Future<void> deleteTransaction(String id) async {
     await _transactionBox.delete(id);
     transactions.removeWhere((t) => t.id == id);
+    // Cascade-delete any payments linked to this transaction (so balances
+    // stay correct and history doesn't show orphan references).
+    await _deletePaymentsReferencing(id);
     _calculateTotalAmount();
   }
 
@@ -222,7 +286,7 @@ class DashboardController extends GetxController {
 
     await _companyBox.put(company.id, company);
     companies.add(company);
-    _showSuccessSnackbar('Company added successfully');
+    // Snackbar shown by caller.
   }
 
   // ==================== Company Transaction CRUD Operations ====================
@@ -244,6 +308,7 @@ class DashboardController extends GetxController {
 
     final transaction = CompanyTransaction(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
+      displayId: generateCompanyTxnDisplayId(),
       companyId: companyId,
       companyName: company.name,
       amount: amount,
@@ -258,7 +323,7 @@ class DashboardController extends GetxController {
     await _companyTransactionBox.put(transaction.id, transaction);
     companyTransactions.add(transaction);
     _calculateTotalAmount();
-    _showCompanyTransactionSuccessSnackbar(type, company.name);
+    // Snackbar shown by caller.
   }
 
   Future<void> editCompanyTransaction({
@@ -277,9 +342,11 @@ class DashboardController extends GetxController {
       _showErrorSnackbar('Company not found');
       return;
     }
+    final existing = _companyTransactionBox.get(id);
 
     final transaction = CompanyTransaction(
       id: id,
+      displayId: existing?.displayId ?? generateCompanyTxnDisplayId(),
       companyId: companyId,
       companyName: company.name,
       amount: amount,
@@ -294,12 +361,13 @@ class DashboardController extends GetxController {
     await _companyTransactionBox.put(id, transaction);
     _updateCompanyTransactionInList(transaction);
     _calculateTotalAmount();
-    _showCompanyTransactionSuccessSnackbar(type, company.name, isUpdate: true);
+    // Snackbar shown by caller.
   }
 
   Future<void> deleteCompanyTransaction(String id) async {
     await _companyTransactionBox.delete(id);
     companyTransactions.removeWhere((ct) => ct.id == id);
+    await _deletePaymentsReferencing(id);
     _calculateTotalAmount();
   }
 
@@ -310,6 +378,202 @@ class DashboardController extends GetxController {
     if (index != -1) {
       companyTransactions[index] = transaction;
     }
+  }
+
+  // ==================== Payment Ledger CRUD ====================
+  //
+  // A PaymentEntry describes a single money movement from one party
+  // (normal / company / transaction) to another. Use this for ALL scenarios:
+  // - personal -> company
+  // - company -> personal
+  // - transaction -> partner
+  // - partner   -> transaction
+  // - transaction -> transaction
+  // - company   -> company
+  //
+  // Optionally set [parentRefId] to attach the payment to an existing
+  // Transaction or CompanyTransaction record. The parent's "current amount"
+  // is then derived from `getCurrentAmount(parentRefId)`.
+
+  Future<PaymentEntry> addPayment({
+    required PartyType fromType,
+    String? fromId,
+    required String fromName,
+    required PartyType toType,
+    String? toId,
+    required String toName,
+    required double amount,
+    required DateTime date,
+    String? description,
+    String? paymentMethod,
+    String? parentRefId,
+  }) async {
+    final entry = PaymentEntry(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      displayId: generatePaymentDisplayId(),
+      fromType: fromType,
+      fromId: fromId,
+      fromName: fromName,
+      toType: toType,
+      toId: toId,
+      toName: toName,
+      amount: amount,
+      date: date,
+      description: description,
+      paymentMethod: paymentMethod,
+      parentRefId: parentRefId,
+    );
+
+    await _paymentEntryBox.put(entry.id, entry);
+    payments.add(entry);
+    _calculateTotalAmount();
+    // Snackbar shown by caller.
+    return entry;
+  }
+
+  Future<void> editPayment({
+    required String id,
+    required PartyType fromType,
+    String? fromId,
+    required String fromName,
+    required PartyType toType,
+    String? toId,
+    required String toName,
+    required double amount,
+    required DateTime date,
+    String? description,
+    String? paymentMethod,
+    String? parentRefId,
+  }) async {
+    final existing = _paymentEntryBox.get(id);
+    if (existing == null) {
+      _showErrorSnackbar('Payment not found');
+      return;
+    }
+    final entry = PaymentEntry(
+      id: id,
+      displayId: existing.displayId ?? generatePaymentDisplayId(),
+      fromType: fromType,
+      fromId: fromId,
+      fromName: fromName,
+      toType: toType,
+      toId: toId,
+      toName: toName,
+      amount: amount,
+      date: date,
+      description: description,
+      paymentMethod: paymentMethod,
+      parentRefId: parentRefId,
+    );
+    await _paymentEntryBox.put(id, entry);
+    final idx = payments.indexWhere((p) => p.id == id);
+    if (idx != -1) payments[idx] = entry;
+    _calculateTotalAmount();
+    // Snackbar shown by caller.
+  }
+
+  Future<void> deletePayment(String id) async {
+    await _paymentEntryBox.delete(id);
+    payments.removeWhere((p) => p.id == id);
+    _calculateTotalAmount();
+  }
+
+  Future<void> _deletePaymentsReferencing(String parentId) async {
+    final toRemove = _paymentEntryBox.values
+        .where((p) => p.parentRefId == parentId)
+        .map((p) => p.id)
+        .toList();
+    for (final pid in toRemove) {
+      await _paymentEntryBox.delete(pid);
+    }
+    payments.removeWhere((p) => toRemove.contains(p.id));
+  }
+
+  // ==================== Payment Ledger Queries ====================
+
+  /// All payments linked to a particular transaction (Transaction or
+  /// CompanyTransaction) via [parentRefId], sorted newest first.
+  List<PaymentEntry> getPaymentsForTransaction(String parentId) {
+    final list = payments.where((p) => p.parentRefId == parentId).toList();
+    list.sort((a, b) => b.date.compareTo(a.date));
+    return list;
+  }
+
+  /// All payments where a given company is on either side, sorted newest first.
+  List<PaymentEntry> getPaymentsForCompany(String companyId) {
+    final list = payments
+        .where(
+          (p) =>
+              (p.fromType == PartyType.company && p.fromId == companyId) ||
+              (p.toType == PartyType.company && p.toId == companyId),
+        )
+        .toList();
+    list.sort((a, b) => b.date.compareTo(a.date));
+    return list;
+  }
+
+  /// All payments involving the "normal" / personal party on either side.
+  List<PaymentEntry> getPaymentsForNormal() {
+    final list = payments
+        .where(
+          (p) => p.fromType == PartyType.normal || p.toType == PartyType.normal,
+        )
+        .toList();
+    list.sort((a, b) => b.date.compareTo(a.date));
+    return list;
+  }
+
+  /// Returns the *current* amount for a parent transaction by applying all
+  /// linked payments to its original amount.
+  ///
+  /// Convention: when the parent is referenced as the **TO** party of a
+  /// payment, money is coming IN -> add. When referenced as the **FROM**
+  /// party, money is going OUT -> subtract. Payments that merely list the
+  /// parent's id as `parentRefId` (without being on either side) are treated
+  /// as informational and don't alter the balance.
+  double getCurrentAmount(String parentId) {
+    final original = _originalAmountOf(parentId);
+    final linked = getPaymentsForTransaction(parentId);
+
+    double net = original;
+    for (final p in linked) {
+      final isParentTo =
+          p.toType == PartyType.transaction && p.toId == parentId;
+      final isParentFrom =
+          p.fromType == PartyType.transaction && p.fromId == parentId;
+
+      if (isParentTo) {
+        net += p.amount;
+      } else if (isParentFrom) {
+        net -= p.amount;
+      }
+      // else: payment is linked for context only — no balance impact.
+    }
+    return net;
+  }
+
+  /// Sum of payments flowing INTO the parent transaction.
+  double getTotalReceivedForTransaction(String parentId) {
+    return getPaymentsForTransaction(parentId)
+        .where((p) => p.toType == PartyType.transaction && p.toId == parentId)
+        .fold(0.0, (sum, p) => sum + p.amount);
+  }
+
+  /// Sum of payments flowing OUT OF the parent transaction.
+  double getTotalSentFromTransaction(String parentId) {
+    return getPaymentsForTransaction(parentId)
+        .where(
+          (p) => p.fromType == PartyType.transaction && p.fromId == parentId,
+        )
+        .fold(0.0, (sum, p) => sum + p.amount);
+  }
+
+  double _originalAmountOf(String parentId) {
+    final t = _transactionBox.get(parentId);
+    if (t != null) return t.amount;
+    final ct = _companyTransactionBox.get(parentId);
+    if (ct != null) return ct.amount;
+    return 0.0;
   }
 
   // ==================== Filter Methods ====================
@@ -408,8 +672,15 @@ class DashboardController extends GetxController {
       'companyTransactions': companyTransactions
           .map((ct) => ct.toJson())
           .toList(),
+      'payments': payments.map((p) => p.toJson()).toList(),
+      'counters': {
+        'txn': _settingsBox.get(_kTxnCounter) ?? 0,
+        'comp': _settingsBox.get(_kCompCounter) ?? 0,
+        'pay': _settingsBox.get(_kPayCounter) ?? 0,
+      },
       'currency': selectedCurrency.value.toJson(),
       'exportDate': DateTime.now().toIso8601String(),
+      'schemaVersion': 2,
     };
   }
 
@@ -441,6 +712,7 @@ class DashboardController extends GetxController {
         await _importDataFromMap(data);
 
         _loadAllData();
+        _backfillDisplayIds();
         _calculateTotalAmount();
 
         // Close loading dialog
@@ -537,6 +809,7 @@ class DashboardController extends GetxController {
     await _companyBox.clear();
     await _transactionBox.clear();
     await _companyTransactionBox.clear();
+    await _paymentEntryBox.clear();
   }
 
   Future<void> _importDataFromMap(Map<String, dynamic> data) async {
@@ -558,6 +831,26 @@ class DashboardController extends GetxController {
       for (var ctData in data['companyTransactions']) {
         final ct = CompanyTransaction.fromJson(ctData);
         await _companyTransactionBox.put(ct.id, ct);
+      }
+    }
+
+    if (data['payments'] != null) {
+      for (var pData in data['payments']) {
+        final p = PaymentEntry.fromJson(pData);
+        await _paymentEntryBox.put(p.id, p);
+      }
+    }
+
+    if (data['counters'] != null) {
+      final counters = Map<String, dynamic>.from(data['counters']);
+      if (counters['txn'] != null) {
+        await _settingsBox.put(_kTxnCounter, counters['txn']);
+      }
+      if (counters['comp'] != null) {
+        await _settingsBox.put(_kCompCounter, counters['comp']);
+      }
+      if (counters['pay'] != null) {
+        await _settingsBox.put(_kPayCounter, counters['pay']);
       }
     }
 

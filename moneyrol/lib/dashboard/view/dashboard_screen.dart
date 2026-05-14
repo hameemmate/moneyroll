@@ -7,6 +7,7 @@ import 'package:moneyrol/dashboard/view/about_app_screen.dart';
 import 'package:moneyrol/dashboard/view/over_due_transation_list.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_company_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_company_transation_dialog.dart';
+import 'package:moneyrol/dashboard/view/widgets/add_payment_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_transation_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/currency_seletion_dialog.dart';
 import '../controller/dashboard_controller.dart';
@@ -703,6 +704,36 @@ class DashboardScreen extends StatelessWidget {
                       builder: (context) => AddCompanyTransactionDialog(
                         type: TransactionType.sent,
                       ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.indigo.shade600.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.swap_horiz_rounded,
+                      color: Colors.indigo.shade600,
+                    ),
+                  ),
+                  title: Text(
+                    'Transfer / Custom Payment',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppConstants.textPrimary,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Move money between any two parties (Partner ↔ Partner, Transaction ↔ Partner, etc.)',
+                  ),
+                  onTap: () {
+                    Get.back();
+                    showDialog(
+                      context: context,
+                      builder: (context) => const AddPaymentDialog(),
                     );
                   },
                 ),

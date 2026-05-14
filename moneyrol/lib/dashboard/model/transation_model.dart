@@ -18,19 +18,21 @@ class TransactionAdapter extends TypeAdapter<Transaction> {
 
     return Transaction(
       id: fields[0] as String,
-      amount: fields[1] as double,
+      amount: (fields[1] as num).toDouble(),
       date: DateTime.parse(fields[2] as String),
       description: fields[3] as String?,
       source: fields[4] as String?,
-      isCash: fields[5] as bool,
+      isCash: fields[5] as bool? ?? true,
       referenceNumber: fields[6] as String?,
+      // Field 7 was added later — older records will not have it (null is OK).
+      displayId: fields[7] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Transaction obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -44,7 +46,9 @@ class TransactionAdapter extends TypeAdapter<Transaction> {
       ..writeByte(5)
       ..write(obj.isCash)
       ..writeByte(6)
-      ..write(obj.referenceNumber);
+      ..write(obj.referenceNumber)
+      ..writeByte(7)
+      ..write(obj.displayId);
   }
 }
 
@@ -57,6 +61,9 @@ class Transaction {
   final String? source;
   final bool isCash;
   final String? referenceNumber;
+  // Human-readable id like TXN-0001. Optional for backward compatibility
+  // with records created before this field existed.
+  final String? displayId;
 
   Transaction({
     required this.id,
@@ -66,11 +73,35 @@ class Transaction {
     this.source,
     this.isCash = true,
     this.referenceNumber,
+    this.displayId,
   });
+
+  Transaction copyWith({
+    String? id,
+    double? amount,
+    DateTime? date,
+    String? description,
+    String? source,
+    bool? isCash,
+    String? referenceNumber,
+    String? displayId,
+  }) {
+    return Transaction(
+      id: id ?? this.id,
+      amount: amount ?? this.amount,
+      date: date ?? this.date,
+      description: description ?? this.description,
+      source: source ?? this.source,
+      isCash: isCash ?? this.isCash,
+      referenceNumber: referenceNumber ?? this.referenceNumber,
+      displayId: displayId ?? this.displayId,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'displayId': displayId,
       'amount': amount,
       'date': date.toIso8601String(),
       'description': description,
@@ -83,11 +114,12 @@ class Transaction {
   factory Transaction.fromJson(Map<String, dynamic> json) {
     return Transaction(
       id: json['id'],
-      amount: json['amount'].toDouble(),
+      displayId: json['displayId'],
+      amount: (json['amount'] as num).toDouble(),
       date: DateTime.parse(json['date']),
       description: json['description'],
       source: json['source'],
-      isCash: json['isCash'],
+      isCash: json['isCash'] ?? true,
       referenceNumber: json['referenceNumber'],
     );
   }

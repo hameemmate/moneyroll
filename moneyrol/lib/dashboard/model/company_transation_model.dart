@@ -39,19 +39,24 @@ class CompanyTransactionAdapter extends TypeAdapter<CompanyTransaction> {
       id: fields[0] as String,
       companyId: fields[1] as String,
       companyName: fields[2] as String,
-      amount: fields[3] as double,
+      amount: (fields[3] as num).toDouble(),
       date: DateTime.parse(fields[4] as String),
       type: TransactionType.values[fields[5] as int],
       description: fields[6] as String?,
       invoiceNumber: fields[7] as String?,
       paymentMethod: fields[8] as String?,
+      // Field 9 added later — older records won't have it.
+      displayId: fields[9] as String?,
+      deadLine: fields[10] != null
+          ? DateTime.parse(fields[10] as String)
+          : null,
     );
   }
 
   @override
   void write(BinaryWriter writer, CompanyTransaction obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -69,7 +74,11 @@ class CompanyTransactionAdapter extends TypeAdapter<CompanyTransaction> {
       ..writeByte(7)
       ..write(obj.invoiceNumber)
       ..writeByte(8)
-      ..write(obj.paymentMethod);
+      ..write(obj.paymentMethod)
+      ..writeByte(9)
+      ..write(obj.displayId)
+      ..writeByte(10)
+      ..write(obj.deadLine?.toIso8601String());
   }
 }
 
@@ -85,6 +94,8 @@ class CompanyTransaction {
   final String? description;
   final String? invoiceNumber;
   final String? paymentMethod;
+  // Human-readable id like COMP-0001. Optional for backward compatibility.
+  final String? displayId;
 
   CompanyTransaction({
     required this.id,
@@ -97,11 +108,41 @@ class CompanyTransaction {
     this.invoiceNumber,
     this.deadLine,
     this.paymentMethod,
+    this.displayId,
   });
+
+  CompanyTransaction copyWith({
+    String? id,
+    String? companyId,
+    String? companyName,
+    double? amount,
+    DateTime? date,
+    DateTime? deadLine,
+    TransactionType? type,
+    String? description,
+    String? invoiceNumber,
+    String? paymentMethod,
+    String? displayId,
+  }) {
+    return CompanyTransaction(
+      id: id ?? this.id,
+      companyId: companyId ?? this.companyId,
+      companyName: companyName ?? this.companyName,
+      amount: amount ?? this.amount,
+      date: date ?? this.date,
+      deadLine: deadLine ?? this.deadLine,
+      type: type ?? this.type,
+      description: description ?? this.description,
+      invoiceNumber: invoiceNumber ?? this.invoiceNumber,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      displayId: displayId ?? this.displayId,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'displayId': displayId,
       'companyId': companyId,
       'companyName': companyName,
       'amount': amount,
@@ -117,11 +158,14 @@ class CompanyTransaction {
   factory CompanyTransaction.fromJson(Map<String, dynamic> json) {
     return CompanyTransaction(
       id: json['id'],
+      displayId: json['displayId'],
       companyId: json['companyId'],
       companyName: json['companyName'],
-      amount: json['amount'].toDouble(),
+      amount: (json['amount'] as num).toDouble(),
       date: DateTime.parse(json['date']),
-      deadLine: DateTime.parse(json['deadline']),
+      deadLine: json['deadline'] != null
+          ? DateTime.parse(json['deadline'])
+          : null,
       type: TransactionType.values[json['type']],
       description: json['description'],
       invoiceNumber: json['invoiceNumber'],

@@ -7,6 +7,7 @@ import 'package:moneyrol/dashboard/controller/dashboard_controller.dart';
 import 'package:moneyrol/dashboard/model/company_model.dart';
 import 'package:moneyrol/dashboard/model/company_transation_model.dart';
 import 'package:moneyrol/dashboard/model/currency_model.dart';
+import 'package:moneyrol/dashboard/model/payment_entry_model.dart';
 import 'package:moneyrol/dashboard/model/transation_model.dart';
 import 'package:moneyrol/dashboard/view/dashboard_screen.dart';
 import 'package:moneyrol/splash/view/splash_screen.dart';
@@ -21,6 +22,8 @@ void main() async {
   Hive.registerAdapter(TransactionTypeAdapter());
   Hive.registerAdapter(CompanyTransactionAdapter());
   Hive.registerAdapter(CurrencyAdapter());
+  Hive.registerAdapter(PartyTypeAdapter());
+  Hive.registerAdapter(PaymentEntryAdapter());
 
   // Open boxes
   await Hive.openBox<Company>(HiveConstants.companyBox);
@@ -28,6 +31,7 @@ void main() async {
   await Hive.openBox<CompanyTransaction>(HiveConstants.companyTransactionBox);
   await Hive.openBox(HiveConstants.settingsBox);
   await Hive.openBox<Currency>(HiveConstants.currencyBox);
+  await Hive.openBox<PaymentEntry>(HiveConstants.paymentEntryBox);
 
   runApp(MyApp());
 }
