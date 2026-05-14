@@ -16,17 +16,37 @@ class TransactionAdapter extends TypeAdapter<Transaction> {
       fields[key] = value;
     }
 
+    // Defensive reads — see note in CompanyTransactionAdapter.
     return Transaction(
-      id: fields[0] as String,
-      amount: (fields[1] as num).toDouble(),
-      date: DateTime.parse(fields[2] as String),
-      description: fields[3] as String?,
-      source: fields[4] as String?,
-      isCash: fields[5] as bool? ?? true,
-      referenceNumber: fields[6] as String?,
+      id: _asString(fields[0]) ?? '',
+      amount: _asDouble(fields[1]),
+      date: _parseDate(fields[2]) ?? DateTime.now(),
+      description: _asString(fields[3]),
+      source: _asString(fields[4]),
+      isCash: fields[5] is bool ? fields[5] as bool : true,
+      referenceNumber: _asString(fields[6]),
       // Field 7 was added later — older records will not have it (null is OK).
-      displayId: fields[7] as String?,
+      displayId: _asString(fields[7]),
     );
+  }
+
+  static String? _asString(dynamic v) => v is String ? v : null;
+
+  static double _asDouble(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0.0;
+    return 0.0;
+  }
+
+  static DateTime? _parseDate(dynamic v) {
+    if (v is String) {
+      try {
+        return DateTime.parse(v);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
   }
 
   @override

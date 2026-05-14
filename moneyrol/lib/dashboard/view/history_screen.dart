@@ -225,65 +225,123 @@ class HistoryScreen extends StatelessWidget {
 
   Widget _buildNormalTransactionsList(BuildContext context) {
     final transactions = controller.getFilteredNormalTransactions();
+    final filteredPayments = controller.getFilteredPayments();
 
-    return _buildTransactionList(
-      transactions.map((t) {
-        return _TransactionCard(
-          displayId: t.displayId,
-          parentId: t.id,
-          title: t.description ?? 'Cash Received',
-          subtitle: t.source ?? 'No source',
+    // Build a single chronological feed: normal-transaction cards + payment
+    // cards involving Normal. Each item carries its date so we can sort the
+    // combined list newest-first regardless of source.
+    final items = <_HistoryItem>[
+      ...transactions.map(
+        (t) => _HistoryItem(
           date: t.date,
-          amount: t.amount,
-          currentAmount: controller.getCurrentAmount(t.id),
-          isPositive: true,
-          extraInfo:
-              '${t.isCash ? 'Cash' : 'Bank'} • Ref: ${t.referenceNumber ?? 'N/A'}',
-          onEdit: () => _showEditNormalTransactionDialog(context, t),
-          onDelete: () => _showDeleteConfirmation(
-            context,
-            () => controller.deleteTransaction(t.id),
+          widget: _TransactionCard(
+            displayId: t.displayId,
+            parentId: t.id,
+            title: t.description ?? 'Cash Received',
+            subtitle: t.source ?? 'No source',
+            date: t.date,
+            amount: t.amount,
+            currentAmount: controller.getCurrentAmount(t.id),
+            isPositive: true,
+            extraInfo:
+                '${t.isCash ? 'Cash' : 'Bank'} • Ref: ${t.referenceNumber ?? 'N/A'}',
+            onEdit: () => _showEditNormalTransactionDialog(context, t),
+            onDelete: () => _showDeleteConfirmation(
+              context,
+              () => controller.deleteTransaction(t.id),
+            ),
+            onPay: () => _openPayDialog(
+              context,
+              toType: PartyType.transaction,
+              toId: t.id,
+              toName: t.displayId ?? t.description ?? 'Transaction',
+            ),
           ),
-          onPay: () => _openPayDialog(
-            context,
-            toType: PartyType.transaction,
-            toId: t.id,
-            toName: t.displayId ?? t.description ?? 'Transaction',
+        ),
+      ),
+      ...filteredPayments.map(
+        (p) => _HistoryItem(
+          date: p.date,
+          widget: _PaymentCard(
+            payment: p,
+            // Sign convention for the Normal feed: green when money landed
+            // in Normal, red when it left Normal.
+            isPositiveFromSelectedPartyPov: p.toType == PartyType.normal,
+            onDelete: () => _showDeleteConfirmation(
+              context,
+              () => controller.deletePayment(p.id),
+            ),
           ),
-        );
-      }).toList(),
-    );
+        ),
+      ),
+    ];
+
+    items.sort((a, b) => b.date.compareTo(a.date));
+    return _buildTransactionList(items.map((i) => i.widget).toList());
   }
 
   Widget _buildCompanyTransactionsList(BuildContext context) {
     final transactions = controller.getFilteredCompanyTransactions();
+    final filteredPayments = controller.getFilteredPayments();
+    final selectedCompany = controller.selectedCompanyId.value;
 
-    return _buildTransactionList(
-      transactions.map((ct) {
-        return _TransactionCard(
-          displayId: ct.displayId,
-          parentId: ct.id,
-          title: ct.companyName,
-          subtitle: ct.description ?? 'No description',
+    final items = <_HistoryItem>[
+      ...transactions.map(
+        (ct) => _HistoryItem(
           date: ct.date,
-          amount: ct.amount,
-          currentAmount: controller.getCurrentAmount(ct.id),
-          isPositive: ct.type == TransactionType.received,
-          extraInfo: _buildCompanyExtraInfo(ct),
-          onEdit: () => _showEditCompanyTransactionDialog(context, ct),
-          onDelete: () => _showDeleteConfirmation(
-            context,
-            () => controller.deleteCompanyTransaction(ct.id),
+          widget: _TransactionCard(
+            displayId: ct.displayId,
+            parentId: ct.id,
+            title: ct.companyName,
+            subtitle: ct.description ?? 'No description',
+            date: ct.date,
+            amount: ct.amount,
+            currentAmount: controller.getCurrentAmount(ct.id),
+            isPositive: ct.type == TransactionType.received,
+            extraInfo: _buildCompanyExtraInfo(ct),
+            onEdit: () => _showEditCompanyTransactionDialog(context, ct),
+            onDelete: () => _showDeleteConfirmation(
+              context,
+              () => controller.deleteCompanyTransaction(ct.id),
+            ),
+            onPay: () => _openPayDialog(
+              context,
+              toType: PartyType.transaction,
+              toId: ct.id,
+              toName: ct.displayId ?? ct.companyName,
+            ),
           ),
-          onPay: () => _openPayDialog(
-            context,
-            toType: PartyType.transaction,
-            toId: ct.id,
-            toName: ct.displayId ?? ct.companyName,
+        ),
+      ),
+      ...filteredPayments.map((p) {
+        // Sign convention for company feed: from the selected company's POV
+        // (or Normal's POV when "all" is selected) — green if that side
+        // received money, red if it sent it.
+        bool isPositive;
+        if (selectedCompany == 'all') {
+          isPositive = p.toType == PartyType.normal;
+        } else {
+          // Company is "from" -> the company sent it OUT (positive in
+          // user's books = received from company).
+          isPositive =
+              p.fromType == PartyType.company && p.fromId == selectedCompany;
+        }
+        return _HistoryItem(
+          date: p.date,
+          widget: _PaymentCard(
+            payment: p,
+            isPositiveFromSelectedPartyPov: isPositive,
+            onDelete: () => _showDeleteConfirmation(
+              context,
+              () => controller.deletePayment(p.id),
+            ),
           ),
         );
-      }).toList(),
-    );
+      }),
+    ];
+
+    items.sort((a, b) => b.date.compareTo(a.date));
+    return _buildTransactionList(items.map((i) => i.widget).toList());
   }
 
   void _openPayDialog(
@@ -461,7 +519,8 @@ class _TransactionCardState extends State<_TransactionCard> {
 
     // Show the current/remaining balance only when it actually differs from
     // the original — otherwise the row stays clean.
-    final showCurrent = widget.currentAmount != null &&
+    final showCurrent =
+        widget.currentAmount != null &&
         (widget.currentAmount! - widget.amount).abs() > 0.005;
 
     return Container(
@@ -592,10 +651,7 @@ class _TransactionCardState extends State<_TransactionCard> {
           if (showCurrent) ...[
             const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 6,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.indigo.shade50,
                 borderRadius: BorderRadius.circular(8),
@@ -677,7 +733,10 @@ class _TransactionCardState extends State<_TransactionCard> {
             if (_expanded)
               Column(
                 children: linkedPayments
-                    .map((p) => _PaymentRow(payment: p, parentId: widget.parentId!))
+                    .map(
+                      (p) =>
+                          _PaymentRow(payment: p, parentId: widget.parentId!),
+                    )
                     .toList(),
               ),
           ],
@@ -802,5 +861,195 @@ class _PaymentRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// Lightweight envelope used to sort heterogeneous history rows by date
+// before rendering.
+class _HistoryItem {
+  final DateTime date;
+  final Widget widget;
+  _HistoryItem({required this.date, required this.widget});
+}
+
+// Card representation of a standalone PaymentEntry in the main history
+// feed. Shown alongside transaction cards so the user sees a single
+// chronological view of everything that touched the selected party.
+class _PaymentCard extends StatelessWidget {
+  const _PaymentCard({
+    required this.payment,
+    required this.isPositiveFromSelectedPartyPov,
+    required this.onDelete,
+  });
+
+  final PaymentEntry payment;
+  // Drives the amount color and the +/- prefix. True when the selected
+  // filter party received money in this payment, false when it sent.
+  final bool isPositiveFromSelectedPartyPov;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.find<DashboardController>();
+    final amountColor = isPositiveFromSelectedPartyPov
+        ? Colors.green.shade600
+        : Colors.red.shade600;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        // Indigo border so transfer cards visually distinguish from the
+        // transaction cards without being noisy.
+        border: Border.all(color: Colors.indigo.shade100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade100,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.swap_horiz_rounded,
+                  size: 18,
+                  color: Colors.indigo.shade700,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (payment.displayId != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.indigo.shade50,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.indigo.shade100),
+                            ),
+                            child: Text(
+                              payment.displayId!,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.indigo.shade800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        Text(
+                          'Transfer',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.indigo.shade700,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${payment.fromName} → ${payment.toName}',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.delete, color: Colors.grey.shade700),
+                onPressed: onDelete,
+                splashRadius: 20,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                DateFormat('dd MMM yyyy • hh:mm a').format(payment.date),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: amountColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: amountColor.withOpacity(0.3)),
+                ),
+                child: Text(
+                  '${isPositiveFromSelectedPartyPov ? '+' : '-'}'
+                  '${controller.formatAmount(payment.amount)}',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: amountColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if ((payment.paymentMethod != null &&
+                  payment.paymentMethod!.isNotEmpty) ||
+              (payment.description != null &&
+                  payment.description!.isNotEmpty)) ...[
+            const SizedBox(height: 10),
+            Divider(color: Colors.grey.shade200, height: 1),
+            const SizedBox(height: 8),
+            Text(
+              _buildSubLine(),
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _buildSubLine() {
+    final parts = <String>[];
+    if (payment.paymentMethod != null && payment.paymentMethod!.isNotEmpty) {
+      parts.add(payment.paymentMethod!);
+    }
+    if (payment.description != null && payment.description!.isNotEmpty) {
+      parts.add(payment.description!);
+    }
+    return parts.join(' • ');
   }
 }

@@ -35,22 +35,54 @@ class CompanyTransactionAdapter extends TypeAdapter<CompanyTransaction> {
       fields[key] = value;
     }
 
+    // Defensive reads: device may carry records written by an earlier
+    // version of this adapter where a particular field index held a
+    // different type. We never want a stale on-disk row to crash app
+    // startup, so every cast is null-tolerant and date parsing falls back
+    // to null when the value isn't a String.
     return CompanyTransaction(
-      id: fields[0] as String,
-      companyId: fields[1] as String,
-      companyName: fields[2] as String,
-      amount: (fields[3] as num).toDouble(),
-      date: DateTime.parse(fields[4] as String),
-      type: TransactionType.values[fields[5] as int],
-      description: fields[6] as String?,
-      invoiceNumber: fields[7] as String?,
-      paymentMethod: fields[8] as String?,
+      id: _asString(fields[0]) ?? '',
+      companyId: _asString(fields[1]) ?? '',
+      companyName: _asString(fields[2]) ?? '',
+      amount: _asDouble(fields[3]),
+      date: _parseDate(fields[4]) ?? DateTime.now(),
+      type: _asTransactionType(fields[5]),
+      description: _asString(fields[6]),
+      invoiceNumber: _asString(fields[7]),
+      paymentMethod: _asString(fields[8]),
       // Field 9 added later — older records won't have it.
-      displayId: fields[9] as String?,
-      deadLine: fields[10] != null
-          ? DateTime.parse(fields[10] as String)
-          : null,
+      displayId: _asString(fields[9]),
+      // Field 10 added later. Some legacy/intermediate records can have
+      // an int here (e.g. left over from a prior schema), so parse only
+      // when it's actually a String.
+      deadLine: _parseDate(fields[10]),
     );
+  }
+
+  static String? _asString(dynamic v) => v is String ? v : null;
+
+  static double _asDouble(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0.0;
+    return 0.0;
+  }
+
+  static DateTime? _parseDate(dynamic v) {
+    if (v is String) {
+      try {
+        return DateTime.parse(v);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  static TransactionType _asTransactionType(dynamic v) {
+    if (v is int && v >= 0 && v < TransactionType.values.length) {
+      return TransactionType.values[v];
+    }
+    return TransactionType.received;
   }
 
   @override

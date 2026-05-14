@@ -179,21 +179,51 @@ class DashboardController extends GetxController {
     payments.value = _paymentEntryBox.values.toList();
   }
 
+  // Computes the user's net total as the sum of each transaction's CURRENT
+  // amount (so payments linked to a parent automatically adjust the parent's
+  // contribution), plus the net effect of every payment on the "Normal"
+  // (personal/cash) side.
+  //
+  // Worked examples — all net out correctly with this formula:
+  //
+  //   • Txn X (Normal income ₹1000), then payment X → Normal ₹300:
+  //     getCurrentAmount(X) = ₹700; Normal-side: +₹300; total = ₹1000 ✓
+  //
+  //   • Payment Company A → Normal ₹200 (no parent):
+  //     no txn change; Normal-side: +₹200; total += ₹200 ✓
+  //
+  //   • Payment Company A → Company B (no Normal involved):
+  //     no txn change; no Normal-side; total unchanged ✓
+  //
+  //   • Payment Normal → Txn Y (received CT of ₹1000):
+  //     getCurrentAmount(Y) = ₹1200 (Y is "to"); Normal-side: -₹200;
+  //     contribution to total = +₹1200 - ₹200 = +₹1000 ✓
   void _calculateTotalAmount() {
     double total = 0;
 
-    // Add normal transactions
-    for (var transaction in transactions) {
-      total += transaction.amount;
+    // Each Normal transaction contributes its CURRENT amount (positive).
+    for (var t in transactions) {
+      total += getCurrentAmount(t.id);
     }
 
-    // Add company transactions
+    // Each Company transaction contributes its CURRENT amount, signed by type.
     for (var ct in companyTransactions) {
+      final current = getCurrentAmount(ct.id);
       if (ct.type == TransactionType.received) {
-        total += ct.amount;
+        total += current;
       } else {
-        total -= ct.amount;
+        total -= current;
       }
+    }
+
+    // Apply the Normal-side effect of every payment. Payments linked to a
+    // parent transaction are already reflected via getCurrentAmount above
+    // for the transaction side; this loop adds the corresponding Normal
+    // side so reallocations net out and pure Company→Normal / Normal→
+    // Company payments still move the total.
+    for (var p in payments) {
+      if (p.toType == PartyType.normal) total += p.amount;
+      if (p.fromType == PartyType.normal) total -= p.amount;
     }
 
     totalAmount.value = total;
@@ -604,25 +634,54 @@ class DashboardController extends GetxController {
     return [];
   }
 
-  double getSelectedTotalReceived() {
-    if (selectedCompanyId.value == 'normal') {
-      return transactions.fold(0.0, (sum, t) => sum + t.amount);
+  // Returns payments that should appear in the history list for the current
+  // filter:
+  //   • all     → every payment
+  //   • normal  → payments where Normal/personal is on either side
+  //   • <company id> → payments where that company is on either side
+  //
+  // Always sorted newest first. The history merges these with normal /
+  // company transactions and sorts the combined list by date so the user
+  // sees a single chronological feed of everything that touched the
+  // selected party.
+  List<PaymentEntry> getFilteredPayments() {
+    Iterable<PaymentEntry> source;
+    final sel = selectedCompanyId.value;
+    if (sel == 'all') {
+      source = payments;
+    } else if (sel == 'normal') {
+      source = payments.where(
+        (p) => p.fromType == PartyType.normal || p.toType == PartyType.normal,
+      );
+    } else {
+      source = payments.where(
+        (p) =>
+            (p.fromType == PartyType.company && p.fromId == sel) ||
+            (p.toType == PartyType.company && p.toId == sel),
+      );
     }
-
-    final targetTransactions = selectedCompanyId.value == 'all'
-        ? companyTransactions
-        : companyTransactions.where(
-            (ct) => ct.companyId == selectedCompanyId.value,
-          );
-
-    return targetTransactions
-        .where((ct) => ct.type == TransactionType.received)
-        .fold(0.0, (sum, ct) => sum + ct.amount);
+    final list = source.toList();
+    list.sort((a, b) => b.date.compareTo(a.date));
+    return list;
   }
 
-  double getSelectedTotalSent() {
+  // Returns "received" for the currently selected filter:
+  // - Normal: user's own income (normal transactions) plus any payment that
+  //   landed in the Normal/personal side.
+  // - Specific company: legacy received CompanyTransactions for that
+  //   company, plus any payment where that company is the "from" party
+  //   (money flowed OUT of the company → into the user's books).
+  // - All partners: aggregated equivalent across every company.
+  double getSelectedTotalReceived() {
     if (selectedCompanyId.value == 'normal') {
-      return 0.0;
+      final baseNormalIncome = transactions.fold(
+        0.0,
+        (sum, t) => sum + t.amount,
+      );
+      final paymentsIntoNormal = payments
+          .where((p) => p.toType == PartyType.normal)
+          .fold(0.0, (sum, p) => sum + p.amount);
+      return baseNormalIncome + paymentsIntoNormal;
     }
 
     final targetTransactions = selectedCompanyId.value == 'all'
@@ -631,9 +690,56 @@ class DashboardController extends GetxController {
             (ct) => ct.companyId == selectedCompanyId.value,
           );
 
-    return targetTransactions
+    final base = targetTransactions
+        .where((ct) => ct.type == TransactionType.received)
+        .fold(0.0, (sum, ct) => sum + ct.amount);
+
+    // Payments where the selected company (or any company when "all") is
+    // on the FROM side count as additional received-from-that-company.
+    final paymentInflows = payments
+        .where(
+          (p) =>
+              p.fromType == PartyType.company &&
+              (selectedCompanyId.value == 'all' ||
+                  p.fromId == selectedCompanyId.value),
+        )
+        .fold(0.0, (sum, p) => sum + p.amount);
+
+    return base + paymentInflows;
+  }
+
+  // Returns "sent" for the currently selected filter:
+  // - Normal: total money that left Normal via payments.
+  // - Specific company: legacy sent CompanyTransactions plus payments where
+  //   that company is the "to" party (money flowed INTO the company).
+  // - All partners: aggregated equivalent across every company.
+  double getSelectedTotalSent() {
+    if (selectedCompanyId.value == 'normal') {
+      return payments
+          .where((p) => p.fromType == PartyType.normal)
+          .fold(0.0, (sum, p) => sum + p.amount);
+    }
+
+    final targetTransactions = selectedCompanyId.value == 'all'
+        ? companyTransactions
+        : companyTransactions.where(
+            (ct) => ct.companyId == selectedCompanyId.value,
+          );
+
+    final base = targetTransactions
         .where((ct) => ct.type == TransactionType.sent)
         .fold(0.0, (sum, ct) => sum + ct.amount);
+
+    final paymentOutflows = payments
+        .where(
+          (p) =>
+              p.toType == PartyType.company &&
+              (selectedCompanyId.value == 'all' ||
+                  p.toId == selectedCompanyId.value),
+        )
+        .fold(0.0, (sum, p) => sum + p.amount);
+
+    return base + paymentOutflows;
   }
 
   // ==================== Data Export/Import Methods ====================
@@ -877,16 +983,54 @@ class DashboardController extends GetxController {
         .toList();
   }
 
+  // Total received FROM partners across all companies — includes payments
+  // where any company sits on the "from" side of the movement.
   double getTotalReceivedFromCompanies() {
-    return companyTransactions
+    final base = companyTransactions
         .where((ct) => ct.type == TransactionType.received)
         .fold(0.0, (sum, ct) => sum + ct.amount);
+    final paymentInflows = payments
+        .where((p) => p.fromType == PartyType.company)
+        .fold(0.0, (sum, p) => sum + p.amount);
+    return base + paymentInflows;
   }
 
+  // Total sent TO partners across all companies — includes payments where
+  // any company sits on the "to" side.
   double getTotalSentToCompanies() {
-    return companyTransactions
+    final base = companyTransactions
         .where((ct) => ct.type == TransactionType.sent)
         .fold(0.0, (sum, ct) => sum + ct.amount);
+    final paymentOutflows = payments
+        .where((p) => p.toType == PartyType.company)
+        .fold(0.0, (sum, p) => sum + p.amount);
+    return base + paymentOutflows;
+  }
+
+  // Net balance for a single company from the user's POV. Positive means
+  // the company owes the user (user has sent more than received); negative
+  // means the user owes the company.
+  double getCompanyBalance(String companyId) {
+    final received = companyTransactions
+        .where(
+          (ct) =>
+              ct.companyId == companyId && ct.type == TransactionType.received,
+        )
+        .fold(0.0, (sum, ct) => sum + ct.amount);
+    final sent = companyTransactions
+        .where(
+          (ct) => ct.companyId == companyId && ct.type == TransactionType.sent,
+        )
+        .fold(0.0, (sum, ct) => sum + ct.amount);
+    final paymentInflows = payments
+        .where((p) => p.fromType == PartyType.company && p.fromId == companyId)
+        .fold(0.0, (sum, p) => sum + p.amount);
+    final paymentOutflows = payments
+        .where((p) => p.toType == PartyType.company && p.toId == companyId)
+        .fold(0.0, (sum, p) => sum + p.amount);
+    // sent + paymentOutflows = money flowed INTO the company (from user's
+    // ledger). received + paymentInflows = money flowed OUT of the company.
+    return (sent + paymentOutflows) - (received + paymentInflows);
   }
 
   // ==================== Helper Methods ====================

@@ -43,21 +43,48 @@ class PaymentEntryAdapter extends TypeAdapter<PaymentEntry> {
       fields[key] = value;
     }
 
+    // Defensive reads — tolerate schema drift without crashing.
     return PaymentEntry(
-      id: fields[0] as String,
-      displayId: fields[1] as String?,
-      fromType: PartyType.values[fields[2] as int],
-      fromId: fields[3] as String?,
-      fromName: fields[4] as String,
-      toType: PartyType.values[fields[5] as int],
-      toId: fields[6] as String?,
-      toName: fields[7] as String,
-      amount: (fields[8] as num).toDouble(),
-      date: DateTime.parse(fields[9] as String),
-      description: fields[10] as String?,
-      paymentMethod: fields[11] as String?,
-      parentRefId: fields[12] as String?,
+      id: _asString(fields[0]) ?? '',
+      displayId: _asString(fields[1]),
+      fromType: _asPartyType(fields[2]),
+      fromId: _asString(fields[3]),
+      fromName: _asString(fields[4]) ?? '',
+      toType: _asPartyType(fields[5]),
+      toId: _asString(fields[6]),
+      toName: _asString(fields[7]) ?? '',
+      amount: _asDouble(fields[8]),
+      date: _parseDate(fields[9]) ?? DateTime.now(),
+      description: _asString(fields[10]),
+      paymentMethod: _asString(fields[11]),
+      parentRefId: _asString(fields[12]),
     );
+  }
+
+  static String? _asString(dynamic v) => v is String ? v : null;
+
+  static double _asDouble(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0.0;
+    return 0.0;
+  }
+
+  static DateTime? _parseDate(dynamic v) {
+    if (v is String) {
+      try {
+        return DateTime.parse(v);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  static PartyType _asPartyType(dynamic v) {
+    if (v is int && v >= 0 && v < PartyType.values.length) {
+      return PartyType.values[v];
+    }
+    return PartyType.normal;
   }
 
   @override
