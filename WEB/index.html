@@ -1,0 +1,1406 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moneyroll - Expense Management Made Simple</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        :root {
+            --primary-color: #000000;
+            --secondary-color: #f8f9fa;
+            --accent-color: #2563eb;
+            --text-color: #1f2937;
+            --light-text: #6b7280;
+            --border-color: #e5e7eb;
+            --card-bg: #ffffff;
+            --warning-color: #dc2626;
+            --success-color: #059669;
+            --playstore-green: #0d9d58;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.05);
+            --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.05);
+        }
+
+        body {
+            background-color: #fefefe;
+            color: var(--text-color);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header Styles */
+        header {
+            background-color: var(--card-bg);
+            box-shadow: var(--shadow-sm);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+            background-color: rgba(255, 255, 255, 0.95);
+        }
+
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 0;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-color);
+        }
+
+        .logo img {
+            width: 80%;
+            height: 80%;
+            object-fit: contain;
+        }
+
+        .logo-text h1 {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--primary-color);
+            line-height: 1.2;
+        }
+
+        .logo-text p {
+            font-size: 13px;
+            color: var(--light-text);
+            font-weight: 400;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text-color);
+            font-weight: 500;
+            font-size: 15px;
+            transition: color 0.2s ease;
+            position: relative;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary-color);
+        }
+
+        .nav-links a:after {
+            content: '';
+            position: absolute;
+            bottom: -6px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background-color: var(--primary-color);
+            transition: width 0.3s ease;
+        }
+
+        .nav-links a:hover:after {
+            width: 100%;
+        }
+
+        .download-btn {
+            background-color: var(--playstore-green);
+            color: white;
+            padding: 10px 22px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: var(--shadow-md);
+            border: none;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .download-btn:hover {
+            background-color: #0b8c4d;
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .mobile-menu-btn {
+            display: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--primary-color);
+        }
+
+        /* Hero Section */
+        .hero-section {
+            text-align: center;
+            padding: 80px 20px;
+            margin: 40px 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-section:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 100%;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-radius: 24px;
+            z-index: -1;
+        }
+
+        .app-logo {
+            width: 140px;
+            height: 140px;
+            margin: 0 auto 32px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            border: 8px solid white;
+        }
+
+        .app-logo:after {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            background: linear-gradient(135deg, transparent 30%, rgba(255, 255, 255, 0.3) 50%, transparent 70%);
+            z-index: 1;
+            animation: shine 3s infinite;
+        }
+
+        @keyframes shine {
+
+            0%,
+            100% {
+                transform: translateX(-100%);
+            }
+
+            50% {
+                transform: translateX(100%);
+            }
+        }
+
+        .app-logo img {
+            width: 70%;
+            height: 70%;
+            object-fit: contain;
+            z-index: 2;
+            position: relative;
+        }
+
+        .hero-section h1 {
+            font-size: 48px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            color: var(--primary-color);
+            background: linear-gradient(135deg, #000000, #4b5563);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-section .tagline {
+            font-size: 20px;
+            color: var(--light-text);
+            margin-bottom: 16px;
+            font-weight: 400;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .version {
+            font-size: 15px;
+            color: var(--light-text);
+            background: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            display: inline-block;
+            box-shadow: var(--shadow-sm);
+            font-weight: 500;
+        }
+
+        /* Content Sections */
+        .section {
+            background-color: var(--card-bg);
+            border-radius: 20px;
+            padding: 48px;
+            margin: 40px 0;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-color);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .section:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .section-title {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 32px;
+            color: var(--primary-color);
+            position: relative;
+            padding-bottom: 16px;
+        }
+
+        .section-title:after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 64px;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-color), transparent);
+            border-radius: 2px;
+        }
+
+        .section-text {
+            font-size: 17px;
+            margin-bottom: 24px;
+            color: var(--text-color);
+            line-height: 1.7;
+        }
+
+        /* Feature Cards */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 24px;
+            margin-top: 32px;
+        }
+
+        .feature-card {
+            display: flex;
+            background-color: var(--secondary-color);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--primary-color);
+            transition: width 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .feature-card:hover:before {
+            width: 6px;
+        }
+
+        .feature-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.1));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 20px;
+            flex-shrink: 0;
+            color: var(--primary-color);
+            font-size: 24px;
+        }
+
+        .feature-content h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--primary-color);
+        }
+
+        .feature-content p {
+            font-size: 15px;
+            color: var(--light-text);
+            line-height: 1.5;
+        }
+
+        /* Warning Box */
+        .warning-box {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.05), rgba(220, 38, 38, 0.1));
+            border-left: 4px solid var(--warning-color);
+            padding: 32px;
+            border-radius: 16px;
+            margin: 40px 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .warning-box:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 100px;
+            height: 100px;
+            background: radial-gradient(circle, rgba(220, 38, 38, 0.1) 0%, transparent 70%);
+            z-index: 0;
+        }
+
+        .warning-box h3 {
+            color: var(--warning-color);
+            margin-bottom: 20px;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .warning-list {
+            list-style-type: none;
+            margin: 24px 0;
+            position: relative;
+            z-index: 1;
+        }
+
+        .warning-list li {
+            margin-bottom: 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 8px 0;
+        }
+
+        .warning-list i {
+            color: var(--warning-color);
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+
+        .cta-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background-color: var(--primary-color);
+            color: white;
+            padding: 16px 28px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+            border: none;
+            cursor: pointer;
+            position: relative;
+            z-index: 1;
+            box-shadow: var(--shadow-md);
+            font-family: 'Inter', sans-serif;
+        }
+
+        .cta-button:hover {
+            background-color: #111827;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        /* Info Cards */
+        .info-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 24px;
+            margin-top: 32px;
+        }
+
+        .info-card {
+            display: flex;
+            align-items: flex-start;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .info-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--primary-color);
+        }
+
+        .info-card i {
+            font-size: 24px;
+            color: var(--primary-color);
+            margin-right: 20px;
+            margin-top: 4px;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.1));
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .info-content h4 {
+            font-size: 14px;
+            color: var(--light-text);
+            margin-bottom: 8px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-content p {
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--text-color);
+            line-height: 1.5;
+        }
+
+        /* Support Section */
+        .support-section {
+            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+            border: 1px solid var(--border-color);
+        }
+
+        .support-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            margin-top: 32px;
+        }
+
+        .support-action {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 24px;
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            text-decoration: none;
+            color: var(--text-color);
+            transition: all 0.3s ease;
+            flex: 1;
+            min-width: 280px;
+            border: 1px solid var(--border-color);
+        }
+
+        .support-action:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--primary-color);
+        }
+
+        .support-action i {
+            font-size: 28px;
+            color: var(--primary-color);
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.1));
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .support-action h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--primary-color);
+        }
+
+        .support-action p {
+            font-size: 15px;
+            color: var(--light-text);
+        }
+
+        /* Additional Play Store Button */
+        .playstore-cta {
+            text-align: center;
+            margin: 60px 0 40px;
+        }
+
+        .playstore-cta h2 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: var(--primary-color);
+        }
+
+        .playstore-cta p {
+            font-size: 18px;
+            color: var(--light-text);
+            margin-bottom: 30px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .big-download-btn {
+            background-color: var(--playstore-green);
+            color: white;
+            padding: 18px 36px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 18px;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: var(--shadow-lg);
+            border: none;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .big-download-btn:hover {
+            background-color: #0b8c4d;
+            transform: translateY(-3px);
+            box-shadow: 0 15px 30px rgba(13, 157, 88, 0.2);
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--light-text);
+            border-top: 1px solid var(--border-color);
+            margin-top: 80px;
+            background: linear-gradient(135deg, #f8fafc, #ffffff);
+        }
+
+        .footer-text {
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: var(--text-color);
+        }
+
+        .copyright {
+            font-size: 14px;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            animation: slideUp 0.4s ease;
+            box-shadow: var(--shadow-lg);
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(30px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--light-text);
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.2s ease;
+        }
+
+        .close-modal:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .modal-title {
+            font-size: 28px;
+            margin-bottom: 24px;
+            color: var(--primary-color);
+            font-weight: 700;
+        }
+
+        .instruction-step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            gap: 16px;
+            padding: 16px;
+            background: var(--secondary-color);
+            border-radius: 12px;
+        }
+
+        .step-icon {
+            color: var(--success-color);
+            font-size: 20px;
+            background: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .step-content h3 {
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--primary-color);
+        }
+
+        .step-content p {
+            font-size: 15px;
+            color: var(--light-text);
+        }
+
+        /* Copy Notification */
+        .copy-notification {
+            display: none;
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background-color: var(--success-color);
+            color: white;
+            padding: 16px 24px;
+            border-radius: 12px;
+            z-index: 1000;
+            box-shadow: var(--shadow-lg);
+            animation: slideInRight 0.3s ease;
+            align-items: center;
+            gap: 12px;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 992px) {
+            .hero-section h1 {
+                font-size: 40px;
+            }
+
+            .section {
+                padding: 40px;
+            }
+
+            .section-title {
+                font-size: 32px;
+            }
+
+            .playstore-cta h2 {
+                font-size: 28px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+                position: fixed;
+                top: 80px;
+                left: 0;
+                width: 100%;
+                background-color: white;
+                flex-direction: column;
+                padding: 24px;
+                box-shadow: var(--shadow-lg);
+                gap: 20px;
+                z-index: 999;
+            }
+
+            .nav-links.active {
+                display: flex;
+            }
+
+            .mobile-menu-btn {
+                display: block;
+            }
+
+            .hero-section {
+                padding: 60px 20px;
+                margin: 30px 0;
+            }
+
+            .hero-section h1 {
+                font-size: 36px;
+            }
+
+            .hero-section .tagline {
+                font-size: 18px;
+            }
+
+            .app-logo {
+                width: 120px;
+                height: 120px;
+            }
+
+            .section {
+                padding: 32px 24px;
+                margin: 32px 0;
+            }
+
+            .section-title {
+                font-size: 28px;
+            }
+
+            .features-grid,
+            .info-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .support-action {
+                min-width: 100%;
+            }
+
+            .big-download-btn {
+                padding: 16px 28px;
+                font-size: 16px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .container {
+                padding: 0 16px;
+            }
+
+            .hero-section h1 {
+                font-size: 32px;
+            }
+
+            .hero-section .tagline {
+                font-size: 17px;
+            }
+
+            .section {
+                padding: 24px 20px;
+            }
+
+            .section-title {
+                font-size: 26px;
+            }
+
+            .modal-content {
+                padding: 32px 24px;
+            }
+
+            .copy-notification {
+                left: 16px;
+                right: 16px;
+                bottom: 16px;
+            }
+
+            .playstore-cta h2 {
+                font-size: 24px;
+            }
+
+            .playstore-cta p {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <header>
+        <div class="container nav-container">
+            <a href="#" class="logo-container">
+                <div class="logo">
+                    <!-- Default icon, will be replaced by JS if logo exists -->
+                    <i class="fas fa-wallet"></i>
+                </div>
+                <div class="logo-text">
+                    <h1>Moneyroll</h1>
+                    <p>Expense Management Made Simple</p>
+                </div>
+            </a>
+
+            <div class="mobile-menu-btn" id="mobileMenuBtn">
+                <i class="fas fa-bars"></i>
+            </div>
+
+            <div class="nav-links" id="navLinks">
+                <a href="#features">Features</a>
+                <a href="#safety">Data Safety</a>
+                <a href="#info">Technical Info</a>
+                <a href="#support">Support</a>
+                <button class="download-btn" id="playStoreBtn">
+                    <i class="fab fa-google-play"></i> Get on Play Store
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <div class="app-logo" id="appLogo">
+                <!-- Logo will be inserted by JavaScript -->
+                <i class="fas fa-wallet"></i>
+            </div>
+            <h1>Moneyroll</h1>
+            <p class="tagline">Expense Management Made Simple</p>
+            <p class="version">Version 1.0.0</p>
+        </section>
+
+        <!-- About Section -->
+        <section class="section" id="about">
+            <h2 class="section-title">About the App</h2>
+            <p class="section-text">
+                Moneyroll is a comprehensive expense management solution designed for individuals, employees, and HR
+                professionals.
+                Manage your expenses efficiently without any login requirements, using only local storage for complete
+                privacy.
+            </p>
+        </section>
+
+        <!-- Key Features -->
+        <section class="section" id="features">
+            <h2 class="section-title">Key Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h3>For Everyone</h3>
+                        <p>No login required. Use it as individual, employee, or HR professional.</p>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-history"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h3>Expense History</h3>
+                        <p>View and edit your complete expense history with powerful filtering.</p>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-file-export"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h3>Import & Export</h3>
+                        <p>Export your data before deleting the app. Import it back anytime.</p>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h3>Local Storage</h3>
+                        <p>All data stored locally on your device. No cloud, no API, complete privacy.</p>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-edit"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h3>Full Edit Control</h3>
+                        <p>Edit any expense entry anytime. No restrictions.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Data Safety Section -->
+        <section class="section" id="safety">
+            <h2 class="section-title">Important Data Safety Note</h2>
+            <div class="warning-box">
+                <h3><i class="fas fa-exclamation-triangle"></i> Warning: Local Storage Only</h3>
+                <p>Moneyroll uses only local mobile database (no cloud backup). Always export your data before:</p>
+                <ul class="warning-list">
+                    <li><i class="fas fa-trash"></i> Uninstalling the app</li>
+                    <li><i class="fas fa-mobile-alt"></i> Resetting your device</li>
+                    <li><i class="fas fa-broom"></i> Clearing app data/cache</li>
+                </ul>
+                <button class="cta-button" id="exportInstructionsBtn">
+                    <i class="fas fa-download"></i> How to Export Data
+                </button>
+            </div>
+        </section>
+
+        <!-- Technical Information -->
+        <section class="section" id="info">
+            <h2 class="section-title">Technical Information</h2>
+            <div class="info-cards">
+                <div class="info-card">
+                    <i class="fas fa-database"></i>
+                    <div class="info-content">
+                        <h4>Storage Method</h4>
+                        <p>Local mobile database</p>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <i class="fas fa-shield-alt"></i>
+                    <div class="info-content">
+                        <h4>Data Privacy</h4>
+                        <p>100% local - no data leaves your device</p>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <i class="fas fa-save"></i>
+                    <div class="info-content">
+                        <h4>Backup Method</h4>
+                        <p>Manual export/import via file system</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Play Store CTA -->
+        <section class="playstore-cta">
+            <h2>Ready to Manage Your Expenses?</h2>
+            <p>Download Moneyroll now from the Google Play Store and start tracking your expenses with complete privacy.
+            </p>
+            <button class="big-download-btn" id="bigPlayStoreBtn">
+                <i class="fab fa-google-play"></i> Download on Play Store
+            </button>
+        </section>
+
+        <!-- Support Section -->
+        <section class="section support-section" id="support">
+            <h2 class="section-title">Support</h2>
+            <p class="section-text">For questions or feedback about Moneyroll:</p>
+
+            <div class="support-actions">
+                <a href="mailto:nithinlal@astsolution.org?subject=Moneyroll App Feedback" class="support-action">
+                    <i class="fas fa-envelope"></i>
+                    <div>
+                        <h3>Email Support</h3>
+                        <p>nithinlal@astsolution.org</p>
+                    </div>
+                </a>
+
+                <a href="#" class="support-action" id="copyAppInfo">
+                    <i class="fas fa-copy"></i>
+                    <div>
+                        <h3>Copy App Info</h3>
+                        <p>Tap to copy app information</p>
+                    </div>
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <p class="footer-text">Made with ❤️ for expense management</p>
+            <p class="copyright">© <span id="currentYear"></span> Moneyroll</p>
+        </div>
+    </footer>
+
+    <!-- Export Instructions Modal -->
+    <div class="modal" id="exportModal">
+        <div class="modal-content">
+            <span class="close-modal" id="closeModal">&times;</span>
+            <h2 class="modal-title">How to Export Your Data</h2>
+            <p>To safely export your expense data:</p>
+
+            <div class="instruction-step">
+                <div class="step-icon">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="step-content">
+                    <h3>1. Go to History screen</h3>
+                    <p>Navigate to the expense history section</p>
+                </div>
+            </div>
+
+            <div class="instruction-step">
+                <div class="step-icon">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="step-content">
+                    <h3>2. Tap "Export" button</h3>
+                    <p>Find and press the export button</p>
+                </div>
+            </div>
+
+            <div class="instruction-step">
+                <div class="step-icon">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="step-content">
+                    <h3>3. Choose export location</h3>
+                    <p>Select where to save your backup file</p>
+                </div>
+            </div>
+
+            <div class="instruction-step">
+                <div class="step-icon">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="step-content">
+                    <h3>4. Save the .json file</h3>
+                    <p>Confirm to save your data as JSON file</p>
+                </div>
+            </div>
+
+            <div class="instruction-step">
+                <div class="step-icon">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="step-content">
+                    <h3>5. Keep the file safe</h3>
+                    <p>Store the backup file in a secure location</p>
+                </div>
+            </div>
+
+            <p style="margin-top: 24px; font-weight: 600; color: var(--primary-color);">
+                Import the same file anytime to restore all your data.
+            </p>
+
+            <button class="cta-button" id="gotItBtn" style="margin-top: 24px;">
+                <i class="fas fa-check"></i> Got it!
+            </button>
+        </div>
+    </div>
+
+    <!-- Copy Notification -->
+    <div class="copy-notification" id="copyNotification">
+        <i class="fas fa-check-circle"></i>
+        <span>Copied to clipboard!</span>
+    </div>
+
+    <script>
+        // Set current year in footer
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        // Try to load logo image
+        function loadLogoImage() {
+            const logoContainers = document.querySelectorAll('.logo, .app-logo');
+            const logoUrl = 'assets/logo.png';
+
+            // Create test image to check if logo exists
+            const testImg = new Image();
+            testImg.onload = function () {
+                // Logo exists, replace icons with image
+                logoContainers.forEach(container => {
+                    container.innerHTML = `<img src="${logoUrl}" alt="Moneyroll Logo">`;
+                    // Remove dark background since logo is black
+                    container.style.background = 'linear-gradient(135deg, #f8f9fa, #e9ecef)';
+                });
+            };
+            testImg.onerror = function () {
+                // Logo doesn't exist, keep the wallet icon
+                console.log('Logo not found at ' + logoUrl + ', using default icon');
+            };
+            testImg.src = logoUrl;
+        }
+
+        // Play Store button functionality
+        function setupPlayStoreButtons() {
+            const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.yourcompany.moneyroll';
+
+            const playStoreBtn = document.getElementById('playStoreBtn');
+            const bigPlayStoreBtn = document.getElementById('bigPlayStoreBtn');
+
+            // Update button texts for better visibility
+            if (playStoreBtn) {
+                playStoreBtn.innerHTML = '<i class="fab fa-google-play"></i> <span style="color: white;">Get on Play Store</span>';
+                playStoreBtn.onclick = function () {
+                    window.open(playStoreUrl, '_blank');
+                };
+            }
+
+            if (bigPlayStoreBtn) {
+                bigPlayStoreBtn.innerHTML = '<i class="fab fa-google-play"></i> <span style="color: white;">Download on Play Store</span>';
+                bigPlayStoreBtn.onclick = function () {
+                    window.open(playStoreUrl, '_blank');
+                };
+            }
+
+            // Also update any other Play Store links
+            document.querySelectorAll('a[href*="play.google.com"]').forEach(link => {
+                link.target = '_blank';
+            });
+        }
+
+        // Mobile menu toggle
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const navLinks = document.getElementById('navLinks');
+
+        if (mobileMenuBtn) {
+            mobileMenuBtn.addEventListener('click', () => {
+                navLinks.classList.toggle('active');
+                mobileMenuBtn.innerHTML = navLinks.classList.contains('active')
+                    ? '<i class="fas fa-times"></i>'
+                    : '<i class="fas fa-bars"></i>';
+            });
+        }
+
+        // Close mobile menu when clicking a link
+        document.querySelectorAll('.nav-links a').forEach(link => {
+            link.addEventListener('click', () => {
+                navLinks.classList.remove('active');
+                if (mobileMenuBtn) {
+                    mobileMenuBtn.innerHTML = '<i class="fas fa-bars"></i>';
+                }
+            });
+        });
+
+        // Export Instructions Modal
+        const exportInstructionsBtn = document.getElementById('exportInstructionsBtn');
+        const exportModal = document.getElementById('exportModal');
+        const closeModal = document.getElementById('closeModal');
+        const gotItBtn = document.getElementById('gotItBtn');
+
+        if (exportInstructionsBtn) {
+            exportInstructionsBtn.addEventListener('click', () => {
+                exportModal.style.display = 'flex';
+                document.body.style.overflow = 'hidden';
+            });
+        }
+
+        if (closeModal) {
+            closeModal.addEventListener('click', () => {
+                exportModal.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            });
+        }
+
+        if (gotItBtn) {
+            gotItBtn.addEventListener('click', () => {
+                exportModal.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            });
+        }
+
+        // Close modal when clicking outside
+        window.addEventListener('click', (event) => {
+            if (event.target === exportModal) {
+                exportModal.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
+        });
+
+        // Copy App Info
+        const copyAppInfoBtn = document.getElementById('copyAppInfo');
+        const copyNotification = document.getElementById('copyNotification');
+
+        if (copyAppInfoBtn) {
+            copyAppInfoBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+
+                const appInfo = `Moneyroll App v1.0.0\nEmail: nithinlal@astsolution.org\nWebsite: https://yourwebsite.com`;
+
+                // Copy to clipboard
+                navigator.clipboard.writeText(appInfo).then(() => {
+                    // Show notification
+                    copyNotification.style.display = 'flex';
+
+                    // Hide after 3 seconds
+                    setTimeout(() => {
+                        copyNotification.style.display = 'none';
+                    }, 3000);
+                }).catch(err => {
+                    console.error('Failed to copy: ', err);
+                    // Fallback for older browsers
+                    const textArea = document.createElement('textarea');
+                    textArea.value = appInfo;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+
+                    // Show notification
+                    copyNotification.style.display = 'flex';
+                    setTimeout(() => {
+                        copyNotification.style.display = 'none';
+                    }, 3000);
+                });
+            });
+        }
+
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                const href = this.getAttribute('href');
+                if (href === '#') return;
+
+                e.preventDefault();
+
+                const targetElement = document.querySelector(href);
+                if (targetElement) {
+                    // Close mobile menu if open
+                    if (navLinks) {
+                        navLinks.classList.remove('active');
+                    }
+                    if (mobileMenuBtn) {
+                        mobileMenuBtn.innerHTML = '<i class="fas fa-bars"></i>';
+                    }
+
+                    window.scrollTo({
+                        top: targetElement.offsetTop - 100,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+
+        // Initialize when page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            loadLogoImage();
+            setupPlayStoreButtons();
+
+            // Add intersection observer for section animations
+            const observerOptions = {
+                threshold: 0.1,
+                rootMargin: '0px 0px -50px 0px'
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.opacity = '1';
+                        entry.target.style.transform = 'translateY(0)';
+                    }
+                });
+            }, observerOptions);
+
+            // Observe all sections
+            document.querySelectorAll('.section').forEach(section => {
+                section.style.opacity = '0';
+                section.style.transform = 'translateY(20px)';
+                section.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+                observer.observe(section);
+            });
+
+            // Also observe playstore CTA
+            const playstoreCta = document.querySelector('.playstore-cta');
+            if (playstoreCta) {
+                playstoreCta.style.opacity = '0';
+                playstoreCta.style.transform = 'translateY(20px)';
+                playstoreCta.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+                observer.observe(playstoreCta);
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && exportModal.style.display === 'flex') {
+                exportModal.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
+        });
+    </script>
+</body>
+
+</html>
