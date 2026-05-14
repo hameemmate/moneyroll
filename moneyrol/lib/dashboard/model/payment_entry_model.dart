@@ -58,6 +58,10 @@ class PaymentEntryAdapter extends TypeAdapter<PaymentEntry> {
       description: _asString(fields[10]),
       paymentMethod: _asString(fields[11]),
       parentRefId: _asString(fields[12]),
+      // Field 13 (added later — older records read null which is fine).
+      // Links this payment to another payment it was sourced from, so the
+      // ledger can model linked-list / chained transfers.
+      sourcePaymentId: _asString(fields[13]),
     );
   }
 
@@ -90,7 +94,7 @@ class PaymentEntryAdapter extends TypeAdapter<PaymentEntry> {
   @override
   void write(BinaryWriter writer, PaymentEntry obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -116,7 +120,9 @@ class PaymentEntryAdapter extends TypeAdapter<PaymentEntry> {
       ..writeByte(11)
       ..write(obj.paymentMethod)
       ..writeByte(12)
-      ..write(obj.parentRefId);
+      ..write(obj.parentRefId)
+      ..writeByte(13)
+      ..write(obj.sourcePaymentId);
   }
 }
 
@@ -128,6 +134,10 @@ class PaymentEntryAdapter extends TypeAdapter<PaymentEntry> {
 // - `parentRefId` (optional) links this payment to a parent transaction or
 //   company-transaction record. When set, the parent's "current amount" is
 //   the original amount adjusted by all payments referencing it.
+// - `sourcePaymentId` (optional) links this payment to ANOTHER PaymentEntry
+//   it was sourced from. This builds a linked-list / chain so the user can
+//   record "from this ₹30 transfer, I sent ₹15 onward to company B" and
+//   trace the full route money took.
 // - `fromId` / `toId` hold the relevant entity id when the party is a
 //   `company` (companyId) or a `transaction` (txn id). For `normal`, leave
 //   the id null.
@@ -145,6 +155,7 @@ class PaymentEntry {
   final String? description;
   final String? paymentMethod;
   final String? parentRefId;
+  final String? sourcePaymentId;
 
   PaymentEntry({
     required this.id,
@@ -160,6 +171,7 @@ class PaymentEntry {
     this.description,
     this.paymentMethod,
     this.parentRefId,
+    this.sourcePaymentId,
   });
 
   // Convenience: returns true if `entityId` is involved on the "from" side.
@@ -191,6 +203,7 @@ class PaymentEntry {
       'description': description,
       'paymentMethod': paymentMethod,
       'parentRefId': parentRefId,
+      'sourcePaymentId': sourcePaymentId,
     };
   }
 
@@ -209,6 +222,7 @@ class PaymentEntry {
       description: json['description'],
       paymentMethod: json['paymentMethod'],
       parentRefId: json['parentRefId'],
+      sourcePaymentId: json['sourcePaymentId'],
     );
   }
 }

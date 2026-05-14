@@ -20,8 +20,29 @@ import '../../controller/dashboard_controller.dart';
 class AddPaymentDialog extends StatefulWidget {
   final PartySelection? prefilledFrom;
   final PartySelection? prefilledTo;
+  // When set, the resulting PaymentEntry is linked to this prior payment
+  // via sourcePaymentId. Used by the "Send from this" action on a payment
+  // detail sheet to build a chained transfer.
+  final String? prefilledSourcePaymentId;
+  // Optional label shown in the header so the user can confirm which prior
+  // payment they're chaining off of.
+  final String? sourceLabel;
+  // When provided the dialog runs in EDIT mode: every field is pre-filled
+  // from this existing payment and Submit calls controller.editPayment
+  // instead of addPayment. The PaymentEntry's id stays the same so the
+  // chain (sourcePaymentId references from other payments) is preserved.
+  final PaymentEntry? paymentToEdit;
 
-  const AddPaymentDialog({super.key, this.prefilledFrom, this.prefilledTo});
+  const AddPaymentDialog({
+    super.key,
+    this.prefilledFrom,
+    this.prefilledTo,
+    this.prefilledSourcePaymentId,
+    this.sourceLabel,
+    this.paymentToEdit,
+  });
+
+  bool get isEditing => paymentToEdit != null;
 
   @override
   State<AddPaymentDialog> createState() => _AddPaymentDialogState();
@@ -58,6 +79,22 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
   @override
   void initState() {
     super.initState();
+    final edit = widget.paymentToEdit;
+    if (edit != null) {
+      // EDIT MODE — populate every field from the existing PaymentEntry.
+      _fromType = edit.fromType;
+      _fromId = edit.fromId;
+      _fromName = edit.fromName;
+      _toType = edit.toType;
+      _toId = edit.toId;
+      _toName = edit.toName;
+      _amountController.text = edit.amount.toString();
+      _selectedDate = edit.date;
+      _selectedTime = TimeOfDay.fromDateTime(edit.date);
+      _paymentMethod = edit.paymentMethod ?? 'Cash';
+      _descriptionController.text = edit.description ?? '';
+      return;
+    }
     final f = widget.prefilledFrom;
     final t = widget.prefilledTo;
     _fromType = f?.type ?? PartyType.normal;
@@ -102,6 +139,10 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(),
+                if (widget.prefilledSourcePaymentId != null) ...[
+                  const SizedBox(height: 12),
+                  _buildChainBanner(),
+                ],
                 const SizedBox(height: 20),
                 Form(
                   key: _formKey,
@@ -169,6 +210,42 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
     );
   }
 
+  // Small banner shown when this dialog is chaining off an existing
+  // payment — confirms to the user which prior payment the new one will
+  // be linked to via sourcePaymentId.
+  Widget _buildChainBanner() {
+    final label = widget.sourceLabel ?? widget.prefilledSourcePaymentId ?? '';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.indigo.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.indigo.shade100),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.link_rounded,
+            size: 16,
+            color: Colors.indigo.shade700,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Chained transfer — sourced from $label',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.indigo.shade800,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ============================ HEADER ============================
   Widget _buildHeader() {
     return Row(
@@ -191,7 +268,9 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Transfer / Add Payment',
+                widget.isEditing
+                    ? 'Edit Transfer'
+                    : 'Transfer / Add Payment',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -201,7 +280,9 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
               const SizedBox(height: 2),
               Obx(
                 () => Text(
-                  'Currency: ${controller.currencySymbol}',
+                  widget.isEditing
+                      ? '${widget.paymentToEdit!.displayId ?? 'PAY'} • ${controller.currencySymbol}'
+                      : 'Currency: ${controller.currencySymbol}',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppConstants.textSecondary,
@@ -774,9 +855,9 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
               ),
               elevation: 0,
             ),
-            child: const Text(
-              'Record Transfer',
-              style: TextStyle(
+            child: Text(
+              widget.isEditing ? 'Save Changes' : 'Record Transfer',
+              style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
                 color: Colors.white,
@@ -864,20 +945,58 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
       parentRefId = _fromId;
     }
 
+    final amount = double.parse(_amountController.text.trim());
+    final fromName =
+        _fromName.isEmpty ? _defaultNameFor(_fromType) : _fromName;
+    final toName = _toName.isEmpty ? _defaultNameFor(_toType) : _toName;
+    final description = _descriptionController.text.trim().isEmpty
+        ? null
+        : _descriptionController.text.trim();
+
+    if (widget.isEditing) {
+      // EDIT MODE — update the existing PaymentEntry in place. The dialog
+      // does not let the user re-target the source link (sourcePaymentId)
+      // because that's an immutable lineage attribute; editPayment in the
+      // controller preserves it automatically when null is passed.
+      final id = widget.paymentToEdit!.id;
+      await controller.editPayment(
+        id: id,
+        fromType: _fromType,
+        fromId: _fromId,
+        fromName: fromName,
+        toType: _toType,
+        toId: _toId,
+        toName: toName,
+        amount: amount,
+        date: combinedDate,
+        description: description,
+        paymentMethod: _paymentMethod,
+        parentRefId: parentRefId,
+      );
+      Get.back();
+      Get.snackbar(
+        'Success',
+        'Transfer ${widget.paymentToEdit!.displayId ?? id} updated',
+        backgroundColor: AppConstants.successColor,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
     final entry = await controller.addPayment(
       fromType: _fromType,
       fromId: _fromId,
-      fromName: _fromName.isEmpty ? _defaultNameFor(_fromType) : _fromName,
+      fromName: fromName,
       toType: _toType,
       toId: _toId,
-      toName: _toName.isEmpty ? _defaultNameFor(_toType) : _toName,
-      amount: double.parse(_amountController.text.trim()),
+      toName: toName,
+      amount: amount,
       date: combinedDate,
-      description: _descriptionController.text.trim().isEmpty
-          ? null
-          : _descriptionController.text.trim(),
+      description: description,
       paymentMethod: _paymentMethod,
       parentRefId: parentRefId,
+      sourcePaymentId: widget.prefilledSourcePaymentId,
     );
 
     // Close the dialog FIRST, then show the snackbar. Doing it the other

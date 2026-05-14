@@ -437,6 +437,7 @@ class DashboardController extends GetxController {
     String? description,
     String? paymentMethod,
     String? parentRefId,
+    String? sourcePaymentId,
   }) async {
     final entry = PaymentEntry(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -452,6 +453,7 @@ class DashboardController extends GetxController {
       description: description,
       paymentMethod: paymentMethod,
       parentRefId: parentRefId,
+      sourcePaymentId: sourcePaymentId,
     );
 
     await _paymentEntryBox.put(entry.id, entry);
@@ -474,6 +476,7 @@ class DashboardController extends GetxController {
     String? description,
     String? paymentMethod,
     String? parentRefId,
+    String? sourcePaymentId,
   }) async {
     final existing = _paymentEntryBox.get(id);
     if (existing == null) {
@@ -494,12 +497,51 @@ class DashboardController extends GetxController {
       description: description,
       paymentMethod: paymentMethod,
       parentRefId: parentRefId,
+      // Preserve existing chain link if caller didn't override it.
+      sourcePaymentId: sourcePaymentId ?? existing.sourcePaymentId,
     );
     await _paymentEntryBox.put(id, entry);
     final idx = payments.indexWhere((p) => p.id == id);
     if (idx != -1) payments[idx] = entry;
     _calculateTotalAmount();
     // Snackbar shown by caller.
+  }
+
+  // ==================== Payment Chain Traversal ====================
+  //
+  // PaymentEntries can be linked into a chain via sourcePaymentId so we can
+  // model "from this ₹30 onward to that company, then onward again, …".
+  // These helpers walk the chain in either direction and stay safe against
+  // accidental cycles (depth-limited / visited-set).
+
+  /// Returns the source chain for a payment, root-first. For example, given
+  /// PAY-0003 sourced from PAY-0002 sourced from PAY-0001, calling this on
+  /// PAY-0003 returns [PAY-0001, PAY-0002] (PAY-0003 itself is NOT
+  /// included).
+  List<PaymentEntry> getSourceChain(String paymentId) {
+    final chain = <PaymentEntry>[];
+    final visited = <String>{paymentId};
+    final start = payments.firstWhereOrNull((p) => p.id == paymentId);
+    if (start == null) return chain;
+
+    String? cursor = start.sourcePaymentId;
+    while (cursor != null && !visited.contains(cursor) && chain.length < 64) {
+      visited.add(cursor);
+      final next = payments.firstWhereOrNull((p) => p.id == cursor);
+      if (next == null) break;
+      chain.insert(0, next); // prepend so result reads root-first
+      cursor = next.sourcePaymentId;
+    }
+    return chain;
+  }
+
+  /// Direct children: payments that were sourced FROM this one (one hop).
+  List<PaymentEntry> getDirectChildren(String paymentId) {
+    final list = payments
+        .where((p) => p.sourcePaymentId == paymentId)
+        .toList();
+    list.sort((a, b) => a.date.compareTo(b.date));
+    return list;
   }
 
   Future<void> deletePayment(String id) async {
@@ -529,6 +571,35 @@ class DashboardController extends GetxController {
     return list;
   }
 
+  /// Returns the FULL tree of payments anchored at a transaction — direct
+  /// children (parentRefId == parentId) plus every chain descendant reached
+  /// by following sourcePaymentId forward. Flattened and sorted newest
+  /// first.
+  ///
+  /// Used by the transaction card's "Linked payments" expansion so the
+  /// user can see the complete onward trail (e.g. TXN → A, A → B, B → C)
+  /// in one place instead of tapping detail sheets one by one.
+  List<PaymentEntry> getPaymentTreeForTransaction(String parentId) {
+    final direct = payments.where((p) => p.parentRefId == parentId).toList();
+    final all = <PaymentEntry>[...direct];
+    final visited = direct.map((p) => p.id).toSet();
+    final queue = <PaymentEntry>[...direct];
+
+    while (queue.isNotEmpty) {
+      final current = queue.removeAt(0);
+      final children = payments.where((p) => p.sourcePaymentId == current.id);
+      for (final c in children) {
+        if (visited.add(c.id)) {
+          all.add(c);
+          queue.add(c);
+        }
+      }
+    }
+
+    all.sort((a, b) => b.date.compareTo(a.date));
+    return all;
+  }
+
   /// All payments where a given company is on either side, sorted newest first.
   List<PaymentEntry> getPaymentsForCompany(String companyId) {
     final list = payments
@@ -553,45 +624,44 @@ class DashboardController extends GetxController {
     return list;
   }
 
-  /// Returns the *current* amount for a parent transaction by applying all
-  /// linked payments to its original amount.
+  /// Returns the *current* amount for a parent transaction by applying every
+  /// payment that touches it on either side.
   ///
-  /// Convention: when the parent is referenced as the **TO** party of a
-  /// payment, money is coming IN -> add. When referenced as the **FROM**
-  /// party, money is going OUT -> subtract. Payments that merely list the
-  /// parent's id as `parentRefId` (without being on either side) are treated
-  /// as informational and don't alter the balance.
+  /// IMPORTANT: we scan **all** payments — not just those whose `parentRefId`
+  /// matches — because a payment between two transactions can only attach
+  /// `parentRefId` to one side. If we filtered by `parentRefId` here, the
+  /// other transaction's balance would never update. So the source of truth
+  /// for balance is "is this transaction on the to/from side of any payment".
+  ///
+  ///   • when this txn is the **TO** side → money coming IN, add.
+  ///   • when this txn is the **FROM** side → money going OUT, subtract.
   double getCurrentAmount(String parentId) {
-    final original = _originalAmountOf(parentId);
-    final linked = getPaymentsForTransaction(parentId);
-
-    double net = original;
-    for (final p in linked) {
+    double net = _originalAmountOf(parentId);
+    for (final p in payments) {
       final isParentTo =
           p.toType == PartyType.transaction && p.toId == parentId;
       final isParentFrom =
           p.fromType == PartyType.transaction && p.fromId == parentId;
-
       if (isParentTo) {
         net += p.amount;
       } else if (isParentFrom) {
         net -= p.amount;
       }
-      // else: payment is linked for context only — no balance impact.
     }
     return net;
   }
 
-  /// Sum of payments flowing INTO the parent transaction.
+  /// Sum of payments flowing INTO this transaction (regardless of which
+  /// side `parentRefId` points to).
   double getTotalReceivedForTransaction(String parentId) {
-    return getPaymentsForTransaction(parentId)
+    return payments
         .where((p) => p.toType == PartyType.transaction && p.toId == parentId)
         .fold(0.0, (sum, p) => sum + p.amount);
   }
 
-  /// Sum of payments flowing OUT OF the parent transaction.
+  /// Sum of payments flowing OUT OF this transaction.
   double getTotalSentFromTransaction(String parentId) {
-    return getPaymentsForTransaction(parentId)
+    return payments
         .where(
           (p) => p.fromType == PartyType.transaction && p.fromId == parentId,
         )
@@ -650,9 +720,29 @@ class DashboardController extends GetxController {
     if (sel == 'all') {
       source = payments;
     } else if (sel == 'normal') {
-      source = payments.where(
-        (p) => p.fromType == PartyType.normal || p.toType == PartyType.normal,
-      );
+      // Normal's feed shows only payments that DIRECTLY touch the Normal
+      // pool — either party is Normal, or party is a normal Transaction
+      // (which is part of Normal). Downstream chain descendants like
+      // A→B→C are NOT listed here as separate cards; the user can still
+      // trace them by tapping the originating payment's detail sheet,
+      // which surfaces the source/forward chain in one tap.
+      //
+      // We also DE-DUPLICATE: if a payment is already shown nested under
+      // a normal Transaction (via parentRefId), we skip it here so it
+      // doesn't appear twice (once nested, once as a top-level card).
+      final normalTxnIds = transactions.map((t) => t.id).toSet();
+      source = payments.where((p) {
+        if (p.parentRefId != null &&
+            normalTxnIds.contains(p.parentRefId)) {
+          return false;
+        }
+        return p.fromType == PartyType.normal ||
+            p.toType == PartyType.normal ||
+            (p.fromType == PartyType.transaction &&
+                normalTxnIds.contains(p.fromId)) ||
+            (p.toType == PartyType.transaction &&
+                normalTxnIds.contains(p.toId));
+      });
     } else {
       source = payments.where(
         (p) =>
@@ -672,74 +762,180 @@ class DashboardController extends GetxController {
   //   company, plus any payment where that company is the "from" party
   //   (money flowed OUT of the company → into the user's books).
   // - All partners: aggregated equivalent across every company.
+  // Returns "Received" for the currently selected filter, expressed from
+  // that selected party's own point of view.
+  //
+  //   • Normal     → money that landed in the user's personal cash (normal
+  //                  transactions are inflows, plus any payment whose "to"
+  //                  side is Normal).
+  //   • All        → user-side aggregate: every received CompanyTransaction
+  //                  across all partners + every payment with a company on
+  //                  the "from" side (because that's money flowing INTO the
+  //                  user's books).
+  //   • <companyX> → party-centric: every CompanyTransaction of type
+  //                  `sent` for X (user sent → company received) + every
+  //                  payment with X on the "to" side. Critically, NEVER
+  //                  touches the Normal account — it only describes what
+  //                  the *company* received.
   double getSelectedTotalReceived() {
-    if (selectedCompanyId.value == 'normal') {
+    final sel = selectedCompanyId.value;
+
+    if (sel == 'normal') {
+      // Normal's cash pool = direct Normal + every normal Transaction.
+      // We count as "received":
+      //   • original amounts of all normal Transactions, AND
+      //   • payments arriving in Normal from OUTSIDE the Normal pool.
+      // We deliberately exclude payments where BOTH sides resolve to
+      // Normal (e.g. TXN-0001 → TXN-0002) because that's an internal
+      // reallocation — no money actually entered Normal.
       final baseNormalIncome = transactions.fold(
         0.0,
         (sum, t) => sum + t.amount,
       );
+      final normalTxnIds = transactions.map((t) => t.id).toSet();
+      bool isFromNormalSide(PaymentEntry p) =>
+          p.fromType == PartyType.normal ||
+          (p.fromType == PartyType.transaction &&
+              normalTxnIds.contains(p.fromId));
+      bool isToNormalSide(PaymentEntry p) =>
+          p.toType == PartyType.normal ||
+          (p.toType == PartyType.transaction &&
+              normalTxnIds.contains(p.toId));
       final paymentsIntoNormal = payments
-          .where((p) => p.toType == PartyType.normal)
+          .where((p) => isToNormalSide(p) && !isFromNormalSide(p))
           .fold(0.0, (sum, p) => sum + p.amount);
       return baseNormalIncome + paymentsIntoNormal;
     }
 
-    final targetTransactions = selectedCompanyId.value == 'all'
-        ? companyTransactions
-        : companyTransactions.where(
-            (ct) => ct.companyId == selectedCompanyId.value,
-          );
+    if (sel == 'all') {
+      final base = companyTransactions
+          .where((ct) => ct.type == TransactionType.received)
+          .fold(0.0, (sum, ct) => sum + ct.amount);
+      final paymentInflows = payments
+          .where((p) => p.fromType == PartyType.company)
+          .fold(0.0, (sum, p) => sum + p.amount);
+      return base + paymentInflows;
+    }
 
-    final base = targetTransactions
-        .where((ct) => ct.type == TransactionType.received)
+    // Specific company — show *its* received amount.
+    // Legacy CT type=sent means user sent to this company, so from the
+    // company's POV it was the receiving party.
+    final baseCompanyReceived = companyTransactions
+        .where((ct) => ct.companyId == sel && ct.type == TransactionType.sent)
         .fold(0.0, (sum, ct) => sum + ct.amount);
-
-    // Payments where the selected company (or any company when "all") is
-    // on the FROM side count as additional received-from-that-company.
-    final paymentInflows = payments
-        .where(
-          (p) =>
-              p.fromType == PartyType.company &&
-              (selectedCompanyId.value == 'all' ||
-                  p.fromId == selectedCompanyId.value),
-        )
+    // Every payment with the company on the "to" side is also inbound.
+    final paymentsIntoCompany = payments
+        .where((p) => p.toType == PartyType.company && p.toId == sel)
         .fold(0.0, (sum, p) => sum + p.amount);
-
-    return base + paymentInflows;
+    return baseCompanyReceived + paymentsIntoCompany;
   }
 
-  // Returns "sent" for the currently selected filter:
-  // - Normal: total money that left Normal via payments.
-  // - Specific company: legacy sent CompanyTransactions plus payments where
-  //   that company is the "to" party (money flowed INTO the company).
-  // - All partners: aggregated equivalent across every company.
+  // Returns "Sent" for the currently selected filter, again from that
+  // selected party's own point of view.
+  //
+  //   • Normal     → money that left the user's personal cash via payments.
+  //   • All        → user-side aggregate: every sent CompanyTransaction +
+  //                  every payment with a company on the "to" side.
+  //   • <companyX> → party-centric: every CompanyTransaction of type
+  //                  `received` for X (user received → company sent) +
+  //                  every payment with X on the "from" side. Doesn't
+  //                  touch Normal's books.
   double getSelectedTotalSent() {
-    if (selectedCompanyId.value == 'normal') {
+    final sel = selectedCompanyId.value;
+
+    if (sel == 'normal') {
+      // Symmetric to the Received branch — count payments that LEFT
+      // Normal's pool for somewhere outside it. Internal moves between
+      // two normal-side parties don't contribute.
+      final normalTxnIds = transactions.map((t) => t.id).toSet();
+      bool isFromNormalSide(PaymentEntry p) =>
+          p.fromType == PartyType.normal ||
+          (p.fromType == PartyType.transaction &&
+              normalTxnIds.contains(p.fromId));
+      bool isToNormalSide(PaymentEntry p) =>
+          p.toType == PartyType.normal ||
+          (p.toType == PartyType.transaction &&
+              normalTxnIds.contains(p.toId));
       return payments
-          .where((p) => p.fromType == PartyType.normal)
+          .where((p) => isFromNormalSide(p) && !isToNormalSide(p))
           .fold(0.0, (sum, p) => sum + p.amount);
     }
 
-    final targetTransactions = selectedCompanyId.value == 'all'
-        ? companyTransactions
-        : companyTransactions.where(
-            (ct) => ct.companyId == selectedCompanyId.value,
-          );
+    if (sel == 'all') {
+      final base = companyTransactions
+          .where((ct) => ct.type == TransactionType.sent)
+          .fold(0.0, (sum, ct) => sum + ct.amount);
+      final paymentOutflows = payments
+          .where((p) => p.toType == PartyType.company)
+          .fold(0.0, (sum, p) => sum + p.amount);
+      return base + paymentOutflows;
+    }
 
-    final base = targetTransactions
-        .where((ct) => ct.type == TransactionType.sent)
-        .fold(0.0, (sum, ct) => sum + ct.amount);
-
-    final paymentOutflows = payments
+    // Specific company — show *its* sent amount.
+    final baseCompanySent = companyTransactions
         .where(
-          (p) =>
-              p.toType == PartyType.company &&
-              (selectedCompanyId.value == 'all' ||
-                  p.toId == selectedCompanyId.value),
+          (ct) => ct.companyId == sel && ct.type == TransactionType.received,
         )
+        .fold(0.0, (sum, ct) => sum + ct.amount);
+    final paymentsFromCompany = payments
+        .where((p) => p.fromType == PartyType.company && p.fromId == sel)
         .fold(0.0, (sum, p) => sum + p.amount);
+    return baseCompanySent + paymentsFromCompany;
+  }
 
-    return base + paymentOutflows;
+  // ==================== User ↔ Company Relationship ====================
+  //
+  // These give the slice of activity that involves only the user's Normal
+  // account and a specific company — i.e. the "what's between me and this
+  // partner" view. Company↔company transfers that don't touch Normal are
+  // intentionally excluded so the numbers reflect only user-relevant cash
+  // movement.
+
+  // Money the user (Normal) received from this company. Includes:
+  //   • legacy "received" CompanyTransactions for the company, AND
+  //   • payments routed from this company INTO Normal — where "into
+  //     Normal" means direct (toType == normal) OR into one of the user's
+  //     normal Transactions (toType == transaction AND toId ∈ normalTxnIds),
+  //     because a normal Transaction is part of Normal's cash pool.
+  double getUserReceivedFromCompany(String companyId) {
+    final base = companyTransactions
+        .where(
+          (ct) =>
+              ct.companyId == companyId && ct.type == TransactionType.received,
+        )
+        .fold(0.0, (sum, ct) => sum + ct.amount);
+    final normalTxnIds = transactions.map((t) => t.id).toSet();
+    final payIn = payments.where((p) {
+      final fromIsCompany =
+          p.fromType == PartyType.company && p.fromId == companyId;
+      final toIsNormalSide = p.toType == PartyType.normal ||
+          (p.toType == PartyType.transaction &&
+              normalTxnIds.contains(p.toId));
+      return fromIsCompany && toIsNormalSide;
+    }).fold(0.0, (sum, p) => sum + p.amount);
+    return base + payIn;
+  }
+
+  // Money the user (Normal) sent to this company. Includes:
+  //   • legacy "sent" CompanyTransactions, AND
+  //   • payments routed from Normal (or any normal Transaction, which is
+  //     part of Normal's pool) INTO this company.
+  double getUserSentToCompany(String companyId) {
+    final base = companyTransactions
+        .where(
+          (ct) => ct.companyId == companyId && ct.type == TransactionType.sent,
+        )
+        .fold(0.0, (sum, ct) => sum + ct.amount);
+    final normalTxnIds = transactions.map((t) => t.id).toSet();
+    final payOut = payments.where((p) {
+      final fromIsNormalSide = p.fromType == PartyType.normal ||
+          (p.fromType == PartyType.transaction &&
+              normalTxnIds.contains(p.fromId));
+      final toIsCompany =
+          p.toType == PartyType.company && p.toId == companyId;
+      return fromIsNormalSide && toIsCompany;
+    }).fold(0.0, (sum, p) => sum + p.amount);
+    return base + payOut;
   }
 
   // ==================== Data Export/Import Methods ====================
