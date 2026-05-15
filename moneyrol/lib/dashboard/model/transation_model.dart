@@ -27,6 +27,9 @@ class TransactionAdapter extends TypeAdapter<Transaction> {
       referenceNumber: _asString(fields[6]),
       // Field 7 was added later — older records will not have it (null is OK).
       displayId: _asString(fields[7]),
+      // Field 8 (added later — tree-wide default deadline for this normal
+      // Transaction's payment tree). Older records have no deadline.
+      deadline: _parseDate(fields[8]),
     );
   }
 
@@ -52,7 +55,7 @@ class TransactionAdapter extends TypeAdapter<Transaction> {
   @override
   void write(BinaryWriter writer, Transaction obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -68,7 +71,9 @@ class TransactionAdapter extends TypeAdapter<Transaction> {
       ..writeByte(6)
       ..write(obj.referenceNumber)
       ..writeByte(7)
-      ..write(obj.displayId);
+      ..write(obj.displayId)
+      ..writeByte(8)
+      ..write(obj.deadline?.toIso8601String());
   }
 }
 
@@ -84,6 +89,10 @@ class Transaction {
   // Human-readable id like TXN-0001. Optional for backward compatibility
   // with records created before this field existed.
   final String? displayId;
+  // Tree-wide default deadline. When this Transaction is the root of a
+  // payment tree, branches without their own deadline can inherit this
+  // value for overdue detection.
+  final DateTime? deadline;
 
   Transaction({
     required this.id,
@@ -94,6 +103,7 @@ class Transaction {
     this.isCash = true,
     this.referenceNumber,
     this.displayId,
+    this.deadline,
   });
 
   Transaction copyWith({
@@ -105,6 +115,7 @@ class Transaction {
     bool? isCash,
     String? referenceNumber,
     String? displayId,
+    DateTime? deadline,
   }) {
     return Transaction(
       id: id ?? this.id,
@@ -115,6 +126,7 @@ class Transaction {
       isCash: isCash ?? this.isCash,
       referenceNumber: referenceNumber ?? this.referenceNumber,
       displayId: displayId ?? this.displayId,
+      deadline: deadline ?? this.deadline,
     );
   }
 
@@ -128,6 +140,7 @@ class Transaction {
       'source': source,
       'isCash': isCash,
       'referenceNumber': referenceNumber,
+      'deadline': deadline?.toIso8601String(),
     };
   }
 
@@ -141,6 +154,9 @@ class Transaction {
       source: json['source'],
       isCash: json['isCash'] ?? true,
       referenceNumber: json['referenceNumber'],
+      deadline: json['deadline'] != null
+          ? DateTime.parse(json['deadline'] as String)
+          : null,
     );
   }
 }

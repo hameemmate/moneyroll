@@ -8,29 +8,11 @@ import 'package:moneyrol/dashboard/model/payment_entry_model.dart';
 import 'package:moneyrol/dashboard/model/transation_model.dart';
 import '../../controller/dashboard_controller.dart';
 
-/// Unified "Transfer / Add Payment" dialog.
-///
-/// Lets the user record a single money movement between ANY two parties
-/// (normal/personal, company/partner, or an existing transaction record).
-/// One dialog therefore covers: company↔company, normal↔company,
-/// transaction↔company, transaction↔transaction, etc.
-///
-/// Optionally pre-fill the "from" or "to" side by passing a [PartySelection]
-/// — useful for the "Pay" button on a transaction row in history.
 class AddPaymentDialog extends StatefulWidget {
   final PartySelection? prefilledFrom;
   final PartySelection? prefilledTo;
-  // When set, the resulting PaymentEntry is linked to this prior payment
-  // via sourcePaymentId. Used by the "Send from this" action on a payment
-  // detail sheet to build a chained transfer.
   final String? prefilledSourcePaymentId;
-  // Optional label shown in the header so the user can confirm which prior
-  // payment they're chaining off of.
   final String? sourceLabel;
-  // When provided the dialog runs in EDIT mode: every field is pre-filled
-  // from this existing payment and Submit calls controller.editPayment
-  // instead of addPayment. The PaymentEntry's id stays the same so the
-  // chain (sourcePaymentId references from other payments) is preserved.
   final PaymentEntry? paymentToEdit;
 
   const AddPaymentDialog({
@@ -48,7 +30,6 @@ class AddPaymentDialog extends StatefulWidget {
   State<AddPaymentDialog> createState() => _AddPaymentDialogState();
 }
 
-/// Lightweight value object describing a chosen party for a payment side.
 class PartySelection {
   final PartyType type;
   final String? id;
@@ -60,12 +41,10 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
   final DashboardController controller = Get.find();
   final _formKey = GlobalKey<FormState>();
 
-  // From-party state
   late PartyType _fromType;
   String? _fromId;
   String _fromName = '';
 
-  // To-party state
   late PartyType _toType;
   String? _toId;
   String _toName = '';
@@ -75,13 +54,13 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   String _paymentMethod = 'Cash';
+  DateTime? _deadline; // new
 
   @override
   void initState() {
     super.initState();
     final edit = widget.paymentToEdit;
     if (edit != null) {
-      // EDIT MODE — populate every field from the existing PaymentEntry.
       _fromType = edit.fromType;
       _fromId = edit.fromId;
       _fromName = edit.fromName;
@@ -93,6 +72,7 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
       _selectedTime = TimeOfDay.fromDateTime(edit.date);
       _paymentMethod = edit.paymentMethod ?? 'Cash';
       _descriptionController.text = edit.description ?? '';
+      _deadline = edit.deadline; // load existing deadline
       return;
     }
     final f = widget.prefilledFrom;
@@ -123,6 +103,22 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
     super.dispose();
   }
 
+  String? _getRootTransactionId() {
+    String? sourceId;
+    if (widget.isEditing) {
+      sourceId = widget.paymentToEdit?.sourcePaymentId;
+    } else {
+      sourceId = widget.prefilledSourcePaymentId;
+    }
+    if (sourceId == null) return null;
+    final sourcePayment = controller.payments.firstWhereOrNull(
+      (p) => p.id == sourceId,
+    );
+    if (sourcePayment == null) return null;
+    final rootTxn = controller.getRootNormalTransaction(sourcePayment);
+    return rootTxn?.displayId ?? rootTxn?.description ?? 'Unknown root';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -139,10 +135,10 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(),
-                if (widget.prefilledSourcePaymentId != null) ...[
-                  const SizedBox(height: 12),
+                if (widget.prefilledSourcePaymentId != null ||
+                    (widget.isEditing &&
+                        widget.paymentToEdit?.sourcePaymentId != null))
                   _buildChainBanner(),
-                ],
                 const SizedBox(height: 20),
                 Form(
                   key: _formKey,
@@ -196,6 +192,8 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
                       const SizedBox(height: 14),
                       _buildPaymentMethodSection(),
                       const SizedBox(height: 14),
+                      _buildDeadlineField(), // deadline picker (only for company "to")
+                      const SizedBox(height: 14),
                       _buildDescriptionField(),
                     ],
                   ),
@@ -210,43 +208,72 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
     );
   }
 
-  // Small banner shown when this dialog is chaining off an existing
-  // payment — confirms to the user which prior payment the new one will
-  // be linked to via sourcePaymentId.
   Widget _buildChainBanner() {
-    final label = widget.sourceLabel ?? widget.prefilledSourcePaymentId ?? '';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.indigo.shade50,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.indigo.shade100),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.link_rounded,
-            size: 16,
-            color: Colors.indigo.shade700,
+    final sourceLabel =
+        widget.sourceLabel ?? widget.prefilledSourcePaymentId ?? '';
+    final rootId = _getRootTransactionId();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.indigo.shade50,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.indigo.shade100),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Chained transfer — sourced from $label',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.indigo.shade800,
+          child: Row(
+            children: [
+              Icon(Icons.link_rounded, size: 16, color: Colors.indigo.shade700),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Chained transfer — sourced from $sourceLabel',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.indigo.shade800,
+                  ),
+                ),
               ),
-              overflow: TextOverflow.ellipsis,
+            ],
+          ),
+        ),
+        if (rootId != null) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.red.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.account_tree_rounded,
+                  size: 16,
+                  color: Colors.red.shade700,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '🔴 Root transaction: $rootId',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.red.shade800,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 
-  // ============================ HEADER ============================
   Widget _buildHeader() {
     return Row(
       children: [
@@ -268,9 +295,7 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                widget.isEditing
-                    ? 'Edit Transfer'
-                    : 'Transfer / Add Payment',
+                widget.isEditing ? 'Edit Transfer' : 'Transfer / Add Payment',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -319,10 +344,6 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
     );
   }
 
-  // ============================ PARTY SECTION ============================
-  // The reusable "From" / "To" picker. Lets the user choose a party type
-  // (normal/company/transaction) and then the specific entity for the
-  // last two types.
   Widget _buildPartySection({
     required String label,
     required PartyType type,
@@ -469,10 +490,7 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
       decoration: _dropdownDecoration('Select partner'),
       items: companies
           .map(
-            (c) => DropdownMenuItem<String>(
-              value: c.id,
-              child: Text(c.name, overflow: TextOverflow.ellipsis),
-            ),
+            (c) => DropdownMenuItem<String>(value: c.id, child: Text(c.name)),
           )
           .toList(),
       onChanged: (id) {
@@ -490,8 +508,6 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
     String? selectedId,
     void Function(String?, String) onSelected,
   ) {
-    // Build a combined list of every transactionish thing the user can pay
-    // against — both normal Transactions and CompanyTransactions.
     final items = <_TxnPickerItem>[];
     for (final t in controller.transactions) {
       items.add(
@@ -526,11 +542,7 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
           .map(
             (i) => DropdownMenuItem<String>(
               value: i.id,
-              child: Text(
-                i.label,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13),
-              ),
+              child: Text(i.label, overflow: TextOverflow.ellipsis),
             ),
           )
           .toList(),
@@ -553,8 +565,7 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
       hintStyle: TextStyle(color: AppConstants.textSecondary.withOpacity(0.6)),
       filled: true,
       fillColor: Colors.white,
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: BorderSide(color: AppConstants.borderColor),
@@ -570,7 +581,6 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
     );
   }
 
-  // ============================ AMOUNT / DATE / TIME ============================
   Widget _buildAmountField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -596,8 +606,7 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
           ),
           child: TextFormField(
             controller: _amountController,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: TextInputType.numberWithOptions(decimal: true),
             style: TextStyle(fontSize: 15, color: AppConstants.textPrimary),
             decoration: InputDecoration(
               hintText: 'Enter amount',
@@ -668,7 +677,6 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
                       fontSize: 13,
                       color: AppConstants.textPrimary,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Icon(
@@ -718,6 +726,57 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
                 ),
                 Icon(
                   Icons.access_time_rounded,
+                  size: 16,
+                  color: AppConstants.textSecondary,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Deadline picker – appears only when "To" is a company
+  Widget _buildDeadlineField() {
+    if (_toType != PartyType.company) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Repayment Deadline (Optional)',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppConstants.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: _pickDeadline,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppConstants.borderColor),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _deadline == null
+                      ? 'No deadline'
+                      : DateFormat('dd MMM yyyy').format(_deadline!),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: _deadline == null
+                        ? Colors.grey
+                        : AppConstants.textPrimary,
+                  ),
+                ),
+                Icon(
+                  Icons.event_rounded,
                   size: 16,
                   color: AppConstants.textSecondary,
                 ),
@@ -819,7 +878,6 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
     );
   }
 
-  // ============================ ACTIONS ============================
   Widget _buildActionRow() {
     return Row(
       children: [
@@ -887,12 +945,20 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
     if (picked != null) setState(() => _selectedTime = picked);
   }
 
+  // Allow any past or future date for deadline
+  Future<void> _pickDeadline() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _deadline ?? DateTime.now(),
+      firstDate: DateTime(2000), // allow past dates
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) setState(() => _deadline = picked);
+  }
+
   Future<void> _submit() async {
-    // Field-level validation first.
     if (!_formKey.currentState!.validate()) return;
 
-    // Same-party guard so we don't record meaningless self-transfers like
-    // company X -> company X.
     if (_fromType == _toType &&
         _fromType != PartyType.normal &&
         _fromId != null &&
@@ -906,7 +972,6 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
       return;
     }
 
-    // Require an explicit entity selection for company/transaction sides.
     if (_fromType != PartyType.normal &&
         (_fromId == null || _fromId!.isEmpty)) {
       Get.snackbar(
@@ -927,6 +992,26 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
       return;
     }
 
+    // Enforce that a non-chained payment must involve Normal or Transaction
+    if (!widget.isEditing && widget.prefilledSourcePaymentId == null) {
+      final bool hasNormalOrTransaction =
+          _fromType == PartyType.normal ||
+          _toType == PartyType.normal ||
+          _fromType == PartyType.transaction ||
+          _toType == PartyType.transaction;
+      if (!hasNormalOrTransaction) {
+        Get.snackbar(
+          'Invalid Transfer',
+          'Direct partner↔partner transfers are not allowed. '
+              'You can only send money from a Normal transaction or as a chained transfer.',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
+      }
+    }
+
     final combinedDate = DateTime(
       _selectedDate.year,
       _selectedDate.month,
@@ -935,29 +1020,20 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
       _selectedTime.minute,
     );
 
-    // If either side references an existing transaction, link the payment
-    // to it via parentRefId so getCurrentAmount() picks it up. If both
-    // sides reference a transaction we link to the "to" side (money in).
     String? parentRefId;
-    if (_toType == PartyType.transaction) {
+    if (_toType == PartyType.transaction)
       parentRefId = _toId;
-    } else if (_fromType == PartyType.transaction) {
+    else if (_fromType == PartyType.transaction)
       parentRefId = _fromId;
-    }
 
     final amount = double.parse(_amountController.text.trim());
-    final fromName =
-        _fromName.isEmpty ? _defaultNameFor(_fromType) : _fromName;
+    final fromName = _fromName.isEmpty ? _defaultNameFor(_fromType) : _fromName;
     final toName = _toName.isEmpty ? _defaultNameFor(_toType) : _toName;
     final description = _descriptionController.text.trim().isEmpty
         ? null
         : _descriptionController.text.trim();
 
     if (widget.isEditing) {
-      // EDIT MODE — update the existing PaymentEntry in place. The dialog
-      // does not let the user re-target the source link (sourcePaymentId)
-      // because that's an immutable lineage attribute; editPayment in the
-      // controller preserves it automatically when null is passed.
       final id = widget.paymentToEdit!.id;
       await controller.editPayment(
         id: id,
@@ -972,6 +1048,7 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
         description: description,
         paymentMethod: _paymentMethod,
         parentRefId: parentRefId,
+        deadline: _deadline,
       );
       Get.back();
       Get.snackbar(
@@ -997,11 +1074,9 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
       paymentMethod: _paymentMethod,
       parentRefId: parentRefId,
       sourcePaymentId: widget.prefilledSourcePaymentId,
+      deadline: _deadline,
     );
 
-    // Close the dialog FIRST, then show the snackbar. Doing it the other
-    // way around can let Get.back() pop the snackbar instead of the dialog
-    // on some GetX versions.
     Get.back();
     Get.snackbar(
       'Success',

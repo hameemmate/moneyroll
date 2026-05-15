@@ -2,25 +2,37 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:moneyrol/constants/app_constants.dart';
-
 import 'package:moneyrol/dashboard/controller/dashboard_controller.dart';
-import 'package:moneyrol/dashboard/model/company_model.dart';
+
 import 'package:moneyrol/dashboard/model/company_transation_model.dart';
 import 'package:moneyrol/dashboard/model/payment_entry_model.dart';
 import 'package:moneyrol/dashboard/model/transation_model.dart';
 import 'package:moneyrol/dashboard/view/widgets/add_payment_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/edit_company_transation_dialog.dart';
 import 'package:moneyrol/dashboard/view/widgets/edit_transation_dialog.dart';
+import 'package:moneyrol/dashboard/view/widgets/root_payment_details_screen.dart';
 
-class HistoryScreen extends StatelessWidget {
+class HistoryScreen extends StatefulWidget {
   HistoryScreen({super.key});
 
-  final DashboardController controller = Get.find();
+  @override
+  State<HistoryScreen> createState() => _HistoryScreenState();
+}
 
-  static const String allCompaniesId = 'all';
+class _HistoryScreenState extends State<HistoryScreen> {
+  final DashboardController controller = Get.find();
+  bool _summaryExpanded = true; // collapsed state
+
   static const String normalTransactionsId = 'normal';
 
-  // Color constants
+  @override
+  void initState() {
+    super.initState();
+    // Set default filter to 'normal' if it's still 'all' from previous sessions
+    if (controller.selectedCompanyId.value == 'all') {
+      controller.selectedCompanyId.value = normalTransactionsId;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,18 +64,14 @@ class HistoryScreen extends StatelessWidget {
     );
   }
 
-  // ---------------- FILTER CHIPS ----------------
-
+  // ---------------- FILTER CHIPS (All Partners removed) ----------------
   Widget _buildCompanyFilterList() {
     return Obx(() {
       final companies = controller.companies;
-
       final options = [
-        {'id': allCompaniesId, 'name': 'All Partners'},
         {'id': normalTransactionsId, 'name': 'Normal Income'},
         ...companies.map((c) => {'id': c.id, 'name': c.name}),
       ];
-
       return Container(
         height: 52,
         decoration: BoxDecoration(
@@ -78,7 +86,6 @@ class HistoryScreen extends StatelessWidget {
           itemBuilder: (_, i) {
             final opt = options[i];
             final isSelected = controller.selectedCompanyId.value == opt['id'];
-
             return Padding(
               padding: const EdgeInsets.only(right: 8),
               child: ChoiceChip(
@@ -107,118 +114,82 @@ class HistoryScreen extends StatelessWidget {
     });
   }
 
-  // ---------------- SUMMARY CARDS ----------------
-
-  // For the All / Normal filters we keep showing a single summary card.
-  // When a specific company is selected we show TWO stacked cards:
-  //   1) the company's own balance (party-centric — includes
-  //      company↔company transfers that don't touch the user)
-  //   2) the user's relationship with this company (Normal-perspective —
-  //      only counts CTs + payments that actually moved cash between the
-  //      user and this company)
+  // ---------------- SUMMARY CARD (collapsible) ----------------
   Widget _buildSummaryCard() {
     return Obx(() {
       final sel = controller.selectedCompanyId.value;
       final isNormal = sel == normalTransactionsId;
-      final isAll = sel == allCompaniesId;
+      final isAll = sel == 'all'; // kept for safety, but never selected now
 
-      if (isAll || isNormal) {
-        final received = controller.getSelectedTotalReceived();
-        final sent = controller.getSelectedTotalSent();
-        final balance = received - sent;
-        final title = isAll ? 'Total Partners Balance' : 'Total Normal Income';
-        // For Normal we frame the outstanding as "Cash on hand" so the
-        // user instantly sees what they still hold after sending some out.
-        // For All Partners we phrase it as a net balance with partners
-        // overall.
-        String? outstandingLabel;
-        if (isNormal) {
-          outstandingLabel = balance >= 0
-              ? 'Cash on hand: ${controller.formatAmount(balance)}'
-              : 'Overdrawn by ${controller.formatAmount(-balance)}';
-        } else {
-          if (balance > 0) {
-            outstandingLabel =
-                'Partners owe you ${controller.formatAmount(balance)} net';
-          } else if (balance < 0) {
-            outstandingLabel =
-                'You owe partners ${controller.formatAmount(-balance)} net';
-          } else {
-            outstandingLabel = 'Settled with all partners';
-          }
-        }
-        return _summaryCard(
-          title: title,
-          received: received,
-          sent: sent,
-          balance: balance,
-          sentColor: isNormal ? Colors.grey : AppConstants.errorColor,
-          outstandingLabel: outstandingLabel,
-        );
-      }
-
-      // Specific company → single "You ↔ company" card.
-      final company = controller.companies.firstWhereOrNull((c) => c.id == sel);
-      final companyName = company?.name ?? 'Company';
-      final userReceived = controller.getUserReceivedFromCompany(sel);
-      final userSent = controller.getUserSentToCompany(sel);
-      final userNet = userReceived - userSent;
-
-      // Make the "they owe you back" or "you owe them" reality explicit —
-      // because a partner that received cash via a transfer from your
-      // pool is expected to settle it back, this label removes any
-      // ambiguity about which way the obligation goes.
-      String outstandingLabel;
-      if (userNet < 0) {
-        outstandingLabel =
-            '$companyName owes you ${controller.formatAmount(-userNet)} back';
-      } else if (userNet > 0) {
-        outstandingLabel =
-            'You owe $companyName ${controller.formatAmount(userNet)}';
-      } else {
-        outstandingLabel = 'Settled with $companyName';
-      }
-
-      return _summaryCard(
-        title: 'You ↔ $companyName',
-        subtitle: 'Cash that actually moved between you and this partner',
-        received: userReceived,
-        sent: userSent,
-        balance: userNet,
-        sentColor: AppConstants.errorColor,
-        outstandingLabel: outstandingLabel,
-        // When userNet < 0 the partner owes the user, so flip the Net
-        // chip to a "they owe you" tone (green/positive for the user)
-        // and prefix the visible amount with a minus to reflect the
-        // direction of obligation.
+      // Use the same UI for both Normal and Company, but collapsible
+      return Column(
+        children: [
+          // Header row with expand/collapse button
+          GestureDetector(
+            onTap: () => setState(() => _summaryExpanded = !_summaryExpanded),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _summaryExpanded ? Icons.expand_less : Icons.expand_more,
+                    size: 18,
+                    color: AppConstants.textSecondary,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _summaryExpanded ? 'Hide summary' : 'Show summary',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppConstants.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_summaryExpanded)
+            isNormal
+                ? _buildNormalSummaryCard()
+                : _buildCompanySummaryCard(sel, isAll),
+        ],
       );
     });
   }
 
-  Widget _summaryCard({
-    required String title,
-    String? subtitle,
-    required double received,
-    required double sent,
-    required double balance,
-    required Color sentColor,
-    String? outstandingLabel,
-    bool tightTop = false,
-  }) {
-    // When net is negative we still want the Net chip to read as a
-    // meaningful number to the user; for company filters specifically a
-    // negative net means "the partner owes you money", which is good news
-    // for you. So tint that chip green to communicate "this is on your
-    // side of the ledger" rather than red.
-    final netIsCredit = balance < 0;
-    final netColor = balance == 0
-        ? Colors.grey
-        : (netIsCredit
-            ? AppConstants.successColor
-            : AppConstants.errorColor);
+  // Normal summary card (existing layout)
+  Widget _buildNormalSummaryCard() {
+    final externalIncome = controller.transactions.fold(
+      0.0,
+      (sum, t) => sum + t.amount,
+    );
+    final cashOnHand = controller.totalAmount.value;
+
+    double totalSentToPartners = 0.0;
+    double totalReceivedFromPartners = 0.0;
+    for (final p in controller.payments) {
+      final root = controller.getRootNormalTransaction(p);
+      if (root == null) continue;
+      final isFromNormal =
+          p.fromType == PartyType.normal ||
+          (p.fromType == PartyType.transaction &&
+              controller.transactions.any((t) => t.id == p.fromId));
+      final isToNormal =
+          p.toType == PartyType.normal ||
+          (p.toType == PartyType.transaction &&
+              controller.transactions.any((t) => t.id == p.toId));
+      if (isFromNormal && !isToNormal) totalSentToPartners += p.amount;
+      if (!isFromNormal && isToNormal) totalReceivedFromPartners += p.amount;
+    }
 
     return Container(
-      margin: EdgeInsets.fromLTRB(16, tightTop ? 0 : 12, 16, 12),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -236,79 +207,231 @@ class HistoryScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
+            'Normal Income',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
               color: AppConstants.textColor,
             ),
           ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
           const SizedBox(height: 20),
           Row(
             children: [
-              _summaryItem('Received', received, AppConstants.successColor),
-              _summaryItem('Sent', sent, sentColor),
-              _summaryItem('Net', balance, netColor),
+              _summaryItem(
+                'External Income',
+                externalIncome,
+                AppConstants.successColor,
+              ),
+              _summaryItem(
+                'Sent to Partners',
+                totalSentToPartners,
+                AppConstants.errorColor,
+              ),
             ],
           ),
-          if (outstandingLabel != null) ...[
-            const SizedBox(height: 14),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _summaryItem(
+                'Received from Partners',
+                totalReceivedFromPartners,
+                AppConstants.successColor,
+              ),
+              _summaryItem(
+                'Cash on Hand',
+                cashOnHand,
+                cashOnHand >= 0
+                    ? AppConstants.successColor
+                    : AppConstants.errorColor,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: cashOnHand >= 0
+                  ? AppConstants.successColor.withOpacity(0.08)
+                  : AppConstants.errorColor.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: cashOnHand >= 0
+                    ? AppConstants.successColor.withOpacity(0.25)
+                    : AppConstants.errorColor.withOpacity(0.25),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  cashOnHand >= 0
+                      ? Icons.account_balance_wallet
+                      : Icons.warning_amber,
+                  size: 16,
+                  color: cashOnHand >= 0
+                      ? AppConstants.successColor
+                      : AppConstants.errorColor,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    cashOnHand >= 0
+                        ? '💰 Available to spend: ${controller.formatAmount(cashOnHand)}'
+                        : '⚠️ Overdrawn by ${controller.formatAmount(-cashOnHand)}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: cashOnHand >= 0
+                          ? AppConstants.successColor
+                          : AppConstants.errorColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Company summary card (specific company)
+  Widget _buildCompanySummaryCard(String sel, bool isAll) {
+    final company = controller.companies.firstWhereOrNull((c) => c.id == sel);
+    final companyName = company?.name ?? 'Company';
+    final netObligation = controller.getCompanyNetObligation(sel);
+
+    if (netObligation <= 0) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.green.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.green.shade100,
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You ↔ $companyName',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppConstants.textColor,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'All transfers including chains',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 20),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: netColor.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: netColor.withOpacity(0.25)),
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green.shade200),
               ),
               child: Row(
-                children: [
-                  Icon(
-                    netIsCredit
-                        ? Icons.savings_rounded
-                        : (balance > 0
-                            ? Icons.outbound_rounded
-                            : Icons.check_circle_outline_rounded),
-                    size: 16,
-                    color: netColor,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      outstandingLabel,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: netColor,
-                      ),
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  Icon(Icons.check_circle, size: 20, color: Colors.green),
+                  SizedBox(width: 8),
+                  Text(
+                    'Settled – No money to return',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.green,
                     ),
                   ),
                 ],
               ),
             ),
           ],
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.shade100,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'You ↔ $companyName',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AppConstants.textColor,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'All transfers including chains',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 20),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.green.shade200),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '💰 To receive',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green.shade700,
+                  ),
+                ),
+                Text(
+                  controller.formatAmount(netObligation),
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.green.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
+  // Reusable summary item (same as before)
   Widget _summaryItem(String label, double amount, Color color) {
-    final controller = Get.find<DashboardController>();
-
     return Expanded(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -332,8 +455,7 @@ class HistoryScreen extends StatelessWidget {
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                '${controller.selectedCurrency.value.symbol}'
-                '${amount.toStringAsFixed(2)}',
+                '${controller.selectedCurrency.value.symbol}${amount.toStringAsFixed(2)}',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -347,97 +469,69 @@ class HistoryScreen extends StatelessWidget {
     );
   }
 
-  // ---------------- TRANSACTION LISTS ----------------
+  // ---------------- The rest of your methods remain unchanged ----------------
+  // (keep _buildNormalTransactionsList, _buildCompanyTransactionsList,
+  //  _buildTransactionList, _showTxnPayChooser, _openPaymentDialog,
+  //  _showPaymentDetails, _detailRow, _buildChainSection, _chainRow,
+  //  _detailPartyRow, _typeLabel, _labelForParent, _navigateToParty,
+  //  _showDeleteConfirmation, _showEditNormalTransactionDialog,
+  //  _showEditCompanyTransactionDialog, and the helper classes)
 
+  // ---------------- NORMAL TRANSACTIONS LIST (only root cards) ----------------
   Widget _buildNormalTransactionsList(BuildContext context) {
-    final transactions = controller.getFilteredNormalTransactions();
-    final filteredPayments = controller.getFilteredPayments();
+    final rootTransactions = controller.transactions.toList();
+    rootTransactions.sort((a, b) => b.date.compareTo(a.date));
 
-    // Build a single chronological feed: normal-transaction cards + payment
-    // cards involving Normal. Each item carries its date so we can sort the
-    // combined list newest-first regardless of source.
-    final items = <_HistoryItem>[
-      ...transactions.map(
-        (t) => _HistoryItem(
-          date: t.date,
-          widget: _TransactionCard(
-            displayId: t.displayId,
-            parentId: t.id,
-            title: t.description ?? 'Cash Received',
-            subtitle: t.source ?? 'No source',
-            date: t.date,
-            amount: t.amount,
-            currentAmount: controller.getCurrentAmount(t.id),
-            isPositive: true,
-            extraInfo:
-                '${t.isCash ? 'Cash' : 'Bank'} • Ref: ${t.referenceNumber ?? 'N/A'}',
-            onEdit: () => _showEditNormalTransactionDialog(context, t),
-            onDelete: () => _showDeleteConfirmation(
-              context,
-              () => controller.deleteTransaction(t.id),
-            ),
-            onPay: () => _showTxnPayChooser(
-              context,
-              txnId: t.id,
-              txnLabel: t.displayId ?? t.description ?? 'Transaction',
-            ),
+    final items = rootTransactions.map((t) {
+      final tree = controller.getPaymentTree(t.id);
+      return _HistoryItem(
+        date: t.date,
+        widget: _RootTransactionCard(
+          transaction: t,
+          paymentTree: tree,
+          onEdit: () => _showEditNormalTransactionDialog(context, t),
+          onDelete: () => _showDeleteConfirmation(
+            context,
+            () => controller.deleteTransaction(t.id),
+          ),
+          onPay: () => _showTxnPayChooser(
+            context,
+            txnId: t.id,
+            txnLabel: t.displayId ?? t.description ?? 'Transaction',
           ),
         ),
-      ),
-      ...filteredPayments.map(
-        (p) => _HistoryItem(
-          date: p.date,
-          widget: _PaymentCard(
-            payment: p,
-            // Sign convention for the Normal feed: green when money landed
-            // in Normal (directly or into a normal Transaction), red when
-            // it left Normal.
-            isPositiveFromSelectedPartyPov: _isNormalReceive(p),
-            onTap: () => _showPaymentDetails(context, p),
-            onDelete: () => _showDeleteConfirmation(
-              context,
-              () => controller.deletePayment(p.id),
-            ),
-          ),
-        ),
-      ),
-    ];
+      );
+    }).toList();
 
     items.sort((a, b) => b.date.compareTo(a.date));
     return _buildTransactionList(items.map((i) => i.widget).toList());
   }
 
-  // Determines whether a payment effectively sent money INTO the user's
-  // Normal pool — either directly (toType=normal) or by landing on one of
-  // the user's normal Transactions.
-  bool _isNormalReceive(PaymentEntry p) {
-    if (p.toType == PartyType.normal) return true;
-    if (p.toType == PartyType.transaction &&
-        controller.transactions.any((t) => t.id == p.toId)) {
-      return true;
-    }
-    return false;
-  }
-
+  // ---------------- COMPANY TRANSACTIONS LIST ----------------
   Widget _buildCompanyTransactionsList(BuildContext context) {
-    final transactions = controller.getFilteredCompanyTransactions();
-    final filteredPayments = controller.getFilteredPayments();
     final selectedCompany = controller.selectedCompanyId.value;
+    final allPayments = controller.payments;
 
-    final items = <_HistoryItem>[
-      ...transactions.map(
-        (ct) => _HistoryItem(
+    final relevantPayments = allPayments.where((p) {
+      if (p.fromType == PartyType.company && p.fromId == selectedCompany)
+        return true;
+      if (p.toType == PartyType.company && p.toId == selectedCompany)
+        return true;
+      return false;
+    }).toList();
+
+    final legacyTransactions = controller.companyTransactions
+        .where((ct) => ct.companyId == selectedCompany)
+        .toList();
+
+    final items = <_HistoryItem>[];
+
+    for (final ct in legacyTransactions) {
+      items.add(
+        _HistoryItem(
           date: ct.date,
-          widget: _TransactionCard(
-            displayId: ct.displayId,
-            parentId: ct.id,
-            title: ct.companyName,
-            subtitle: ct.description ?? 'No description',
-            date: ct.date,
-            amount: ct.amount,
-            currentAmount: controller.getCurrentAmount(ct.id),
-            isPositive: ct.type == TransactionType.received,
-            extraInfo: _buildCompanyExtraInfo(ct),
+          widget: _LegacyCompanyTransactionCard(
+            transaction: ct,
             onEdit: () => _showEditCompanyTransactionDialog(context, ct),
             onDelete: () => _showDeleteConfirmation(
               context,
@@ -450,48 +544,66 @@ class HistoryScreen extends StatelessWidget {
             ),
           ),
         ),
-      ),
-      ...filteredPayments.map((p) {
-        // Sign convention for the company feed: party-centric.
-        //   • When a specific company is selected, green if that company
-        //     is on the "to" side of the payment (it received money),
-        //     red if it's on the "from" side (it sent money). This is
-        //     what you'd intuitively expect when opening "Company B" and
-        //     looking at a Company A → Company B transfer.
-        //   • When "All" is selected, fall back to Normal's POV: green if
-        //     money landed in Normal, red otherwise. Pure company↔company
-        //     payments therefore show as red in the All feed (Normal
-        //     didn't gain), which is consistent with how legacy "sent"
-        //     CompanyTransactions render.
-        bool isPositive;
-        if (selectedCompany == 'all') {
-          isPositive = p.toType == PartyType.normal;
-        } else {
-          isPositive =
-              p.toType == PartyType.company && p.toId == selectedCompany;
-        }
-        return _HistoryItem(
+      );
+    }
+
+    for (final p in relevantPayments) {
+      final subTree = controller.getPaymentTree(p.id);
+      final rootNormal = controller.getRootNormalTransaction(p);
+      items.add(
+        _HistoryItem(
           date: p.date,
-          widget: _PaymentCard(
+          widget: _CompanyPaymentCard(
             payment: p,
-            isPositiveFromSelectedPartyPov: isPositive,
+            subTree: subTree,
+            rootNormal: rootNormal,
             onTap: () => _showPaymentDetails(context, p),
             onDelete: () => _showDeleteConfirmation(
               context,
               () => controller.deletePayment(p.id),
             ),
           ),
-        );
-      }),
-    ];
+        ),
+      );
+    }
 
     items.sort((a, b) => b.date.compareTo(a.date));
     return _buildTransactionList(items.map((i) => i.widget).toList());
   }
 
-  // Two-direction chooser shown when the user taps the Pay icon on a
-  // transaction row. Lets them either send money FROM this transaction or
-  // receive money INTO it without having to flip From/To inside the dialog.
+  Widget _buildTransactionList(List<Widget> items) {
+    if (items.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.receipt_long, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              'No transactions found',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Add transactions to see them here',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+            ),
+          ],
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: items.length,
+      itemBuilder: (_, i) => items[i],
+    );
+  }
+
+  // ---------------- HELPER DIALOGS ----------------
   void _showTxnPayChooser(
     BuildContext context, {
     required String txnId,
@@ -612,28 +724,16 @@ class HistoryScreen extends StatelessWidget {
       builder: (_) => AddPaymentDialog(
         prefilledFrom: fromType == null
             ? null
-            : PartySelection(
-                type: fromType,
-                id: fromId,
-                name: fromName ?? '',
-              ),
+            : PartySelection(type: fromType, id: fromId, name: fromName ?? ''),
         prefilledTo: toType == null
             ? null
-            : PartySelection(
-                type: toType,
-                id: toId,
-                name: toName ?? '',
-              ),
+            : PartySelection(type: toType, id: toId, name: toName ?? ''),
         prefilledSourcePaymentId: sourcePaymentId,
         sourceLabel: sourceLabel,
       ),
     );
   }
 
-  // Bottom sheet shown when a payment card is tapped. Lays out every
-  // attribute of the PaymentEntry and provides one-tap navigation to the
-  // source party and destination party so the user can trace the full
-  // route of a transfer.
   void _showPaymentDetails(BuildContext context, PaymentEntry p) {
     showModalBottomSheet(
       context: context,
@@ -737,12 +837,16 @@ class HistoryScreen extends StatelessWidget {
                   const SizedBox(height: 8),
                   _detailRow('Linked to', _labelForParent(p.parentRefId!)),
                 ],
+                if (p.deadline != null) ...[
+                  const SizedBox(height: 8),
+                  _detailRow(
+                    'Deadline',
+                    DateFormat('dd MMM yyyy').format(p.deadline!),
+                    highlight: p.deadline!.isBefore(DateTime.now()),
+                  ),
+                ],
                 _buildChainSection(context, p),
                 const SizedBox(height: 18),
-                // Primary action: send another transfer sourced from this
-                // one. Pre-fills From = this payment's destination party
-                // (because that's where the money sits now) and chains the
-                // new payment back to this one via sourcePaymentId.
                 ElevatedButton.icon(
                   onPressed: () {
                     Get.back();
@@ -782,8 +886,7 @@ class HistoryScreen extends StatelessWidget {
                         label: const Text('Edit'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.indigo.shade700,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           side: BorderSide(color: Colors.indigo.shade200),
                         ),
                       ),
@@ -802,8 +905,7 @@ class HistoryScreen extends StatelessWidget {
                         label: const Text('Delete'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.red.shade700,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           side: BorderSide(color: Colors.red.shade200),
                         ),
                       ),
@@ -818,9 +920,38 @@ class HistoryScreen extends StatelessWidget {
     );
   }
 
-  // Renders the backward (source) and forward (children) chain for a
-  // payment so the user can see where the money came from and where it
-  // went onward.
+  Widget _detailRow(String label, String value, {bool highlight = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 70,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: highlight ? Colors.red.shade700 : Colors.grey.shade600,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                color: highlight ? Colors.red.shade700 : null,
+                fontWeight: highlight ? FontWeight.w600 : null,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildChainSection(BuildContext context, PaymentEntry p) {
     final source = controller.getSourceChain(p.id);
     final children = controller.getDirectChildren(p.id);
@@ -883,7 +1014,7 @@ class HistoryScreen extends StatelessWidget {
       onTap: highlight
           ? null
           : () {
-              Get.back(); // close current sheet
+              Get.back();
               _showPaymentDetails(Get.context!, payment);
             },
       borderRadius: BorderRadius.circular(8),
@@ -988,19 +1119,13 @@ class HistoryScreen extends StatelessWidget {
                   ),
                   Text(
                     _typeLabel(partyType),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
                 ],
               ),
             ),
             if (canNavigate)
-              Icon(
-                Icons.chevron_right_rounded,
-                color: Colors.grey.shade500,
-              ),
+              Icon(Icons.chevron_right_rounded, color: Colors.grey.shade500),
           ],
         ),
       ),
@@ -1018,54 +1143,20 @@ class HistoryScreen extends StatelessWidget {
     }
   }
 
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 70,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 13),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Resolve a parent reference id to a human-friendly label so the user
-  // can recognise which transaction this payment was posted against.
   String _labelForParent(String parentId) {
-    final t = controller.transactions
-        .firstWhereOrNull((x) => x.id == parentId);
+    final t = controller.transactions.firstWhereOrNull((x) => x.id == parentId);
     if (t != null) {
       return '${t.displayId ?? 'TXN'} • ${t.description ?? 'Normal'}';
     }
-    final ct = controller.companyTransactions
-        .firstWhereOrNull((x) => x.id == parentId);
+    final ct = controller.companyTransactions.firstWhereOrNull(
+      (x) => x.id == parentId,
+    );
     if (ct != null) {
       return '${ct.displayId ?? 'COMP'} • ${ct.companyName}';
     }
     return parentId;
   }
 
-  // Single-tap navigation to a party. Switches the filter so the user can
-  // see that party's full feed immediately. For a Transaction party we
-  // route to its underlying company (CompanyTransaction) or to Normal (if
-  // it's a normal Transaction).
   void _navigateToParty(PartyType type, String? id) {
     if (type == PartyType.normal) {
       controller.selectedCompanyId.value = normalTransactionsId;
@@ -1076,79 +1167,18 @@ class HistoryScreen extends StatelessWidget {
       return;
     }
     if (type == PartyType.transaction && id != null) {
-      // Normal Transaction → Normal feed
       if (controller.transactions.any((t) => t.id == id)) {
         controller.selectedCompanyId.value = normalTransactionsId;
         return;
       }
-      // CompanyTransaction → that company's feed
-      final ct = controller.companyTransactions
-          .firstWhereOrNull((x) => x.id == id);
+      final ct = controller.companyTransactions.firstWhereOrNull(
+        (x) => x.id == id,
+      );
       if (ct != null) {
         controller.selectedCompanyId.value = ct.companyId;
       }
     }
   }
-
-  String _buildCompanyExtraInfo(CompanyTransaction ct) {
-    String base =
-        'Invoice: ${ct.invoiceNumber ?? 'N/A'} • ${ct.paymentMethod ?? 'N/A'}';
-
-    // Only sent transactions can have deadline
-    if (ct.type == TransactionType.sent && ct.deadLine != null) {
-      final now = DateTime.now();
-      final deadline = ct.deadLine!;
-
-      final isOverdue = deadline.isBefore(
-        DateTime(now.year, now.month, now.day),
-      );
-
-      final deadlineText = DateFormat('dd MMM yyyy').format(deadline);
-
-      if (isOverdue) {
-        return '$base • ⚠ Overdue (Due $deadlineText)';
-      } else {
-        return '$base • Due $deadlineText';
-      }
-    }
-
-    return base;
-  }
-
-  Widget _buildTransactionList(List<Widget> items) {
-    if (items.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.receipt_long, size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              'No transactions found',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Add transactions to see them here',
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: items.length,
-      itemBuilder: (_, i) => items[i],
-    );
-  }
-
-  // ---------------- DIALOG HELPERS ----------------
 
   void _showDeleteConfirmation(BuildContext context, VoidCallback onConfirm) {
     showDialog(
@@ -1196,66 +1226,432 @@ class HistoryScreen extends StatelessWidget {
   }
 }
 
-// ================= TRANSACTION CARD =================
-
-class _TransactionCard extends StatefulWidget {
-  const _TransactionCard({
-    required this.title,
-    required this.subtitle,
-    required this.date,
-    required this.amount,
-    required this.isPositive,
-    required this.onDelete,
-    required this.onEdit,
-    required this.extraInfo,
-    this.displayId,
-    this.parentId,
-    this.currentAmount,
-    this.onPay,
-  });
-
-  final String title;
-  final String subtitle;
-  final DateTime date;
-  final double amount;
-  final bool isPositive;
-  final VoidCallback onDelete;
+// ================= LEGACY COMPANY TRANSACTION CARD =================
+class _LegacyCompanyTransactionCard extends StatelessWidget {
+  final CompanyTransaction transaction;
   final VoidCallback onEdit;
-  final String extraInfo;
-  // New optional fields for the payment-ledger features.
-  final String? displayId;
-  final String? parentId;
-  final double? currentAmount;
-  final VoidCallback? onPay;
+  final VoidCallback onDelete;
+  final VoidCallback onPay;
 
-  @override
-  State<_TransactionCard> createState() => _TransactionCardState();
-}
-
-class _TransactionCardState extends State<_TransactionCard> {
-  bool _expanded = false;
+  const _LegacyCompanyTransactionCard({
+    required this.transaction,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onPay,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final isOverdue = widget.extraInfo.contains('Overdue');
     final controller = Get.find<DashboardController>();
-    final amountColor = widget.isPositive
+    final isReceived = transaction.type == TransactionType.received;
+    final amountColor = isReceived
         ? Colors.green.shade600
         : Colors.red.shade600;
+    final sign = isReceived ? '+' : '-';
+    final isOverdue =
+        (transaction.type == TransactionType.sent &&
+        transaction.deadLine != null &&
+        transaction.deadLine!.isBefore(DateTime.now()));
+    final netOwed = controller.getCompanyNetObligation(transaction.companyId);
 
-    // Linked payments for this transaction — full tree (direct children +
-    // every chain descendant) so the user can see the entire onward path
-    // (e.g. TXN → A, A → B, B → C) without leaving this card.
-    final List<PaymentEntry> linkedPayments = widget.parentId == null
-        ? const []
-        : controller.getPaymentTreeForTransaction(widget.parentId!);
-    final hasPayments = linkedPayments.isNotEmpty;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isOverdue ? Colors.red.shade50 : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isOverdue ? Colors.red.shade200 : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (transaction.displayId != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          transaction.displayId!,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                    Text(
+                      transaction.companyName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      transaction.description ?? 'No description',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.swap_horiz_rounded,
+                  color: Colors.indigo.shade600,
+                ),
+                onPressed: onPay,
+              ),
+              IconButton(
+                icon: Icon(Icons.edit, color: Colors.grey.shade700),
+                onPressed: onEdit,
+              ),
+              IconButton(
+                icon: Icon(Icons.delete, color: Colors.grey.shade700),
+                onPressed: onDelete,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                DateFormat('dd MMM yyyy • hh:mm a').format(transaction.date),
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: amountColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: amountColor.withOpacity(0.3)),
+                ),
+                child: Text(
+                  '$sign${controller.formatAmount(transaction.amount)}',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: amountColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (transaction.type == TransactionType.sent &&
+              transaction.deadLine != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Due: ${DateFormat('dd MMM yyyy').format(transaction.deadLine!)}',
+              style: TextStyle(
+                fontSize: 12,
+                color: isOverdue ? Colors.red.shade700 : Colors.orange.shade700,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          if (netOwed > 0.01) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(
+                  Icons.arrow_upward_rounded,
+                  size: 14,
+                  color: Colors.green.shade700,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Owes: ${controller.formatAmount(netOwed)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
-    // Show the current/remaining balance only when it actually differs from
-    // the original — otherwise the row stays clean.
-    final showCurrent =
-        widget.currentAmount != null &&
-        (widget.currentAmount! - widget.amount).abs() > 0.005;
+// ================= COMPANY PAYMENT CARD =================
+class _CompanyPaymentCard extends StatelessWidget {
+  final PaymentEntry payment;
+  final List<PaymentNode> subTree;
+  final Transaction? rootNormal;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  const _CompanyPaymentCard({
+    required this.payment,
+    required this.subTree,
+    this.rootNormal,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.find<DashboardController>();
+    final isChained = payment.sourcePaymentId != null;
+    final hasChildren = subTree.isNotEmpty;
+    final netOwed = controller.getNetObligationForBranch(payment.id);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: isChained
+            ? LinearGradient(
+                colors: [Colors.amber.shade50, Colors.amber.shade100],
+              )
+            : LinearGradient(
+                colors: [
+                  Colors.indigo.shade50,
+                  Colors.indigo.shade50.withOpacity(0.4),
+                ],
+              ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isChained ? Colors.amber.shade400 : Colors.indigo.shade200,
+          width: isChained ? 1.5 : 1.0,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              if (payment.displayId != null) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.8),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    payment.displayId!,
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Text(
+                                'Transfer',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.indigo.shade700,
+                                ),
+                              ),
+                              if (isChained) ...[
+                                const SizedBox(width: 6),
+                                Icon(
+                                  Icons.link_rounded,
+                                  size: 12,
+                                  color: Colors.amber.shade700,
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${payment.fromName} → ${payment.toName}',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (rootNormal != null)
+                            Text(
+                              'Root: ${rootNormal!.displayId ?? rootNormal!.description ?? 'Normal'}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          if (netOwed > 0.01) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.arrow_upward_rounded,
+                                  size: 14,
+                                  color: Colors.green.shade700,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Owes: ${controller.formatAmount(netOwed)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.green.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.delete, color: Colors.grey.shade700),
+                      onPressed: onDelete,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      DateFormat('dd MMM yyyy • hh:mm a').format(payment.date),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    Text(
+                      controller.formatAmount(payment.amount),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                if (hasChildren) ...[
+                  const SizedBox(height: 8),
+                  const Divider(),
+                  const SizedBox(height: 4),
+                  _PaymentTreeViewWithActions(
+                    nodes: subTree,
+                    depth: 1,
+                    rootTransactionId: payment.id,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ================= ROOT TRANSACTION CARD =================
+class _RootTransactionCard extends StatefulWidget {
+  final Transaction transaction;
+  final List<PaymentNode> paymentTree;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onPay;
+
+  const _RootTransactionCard({
+    required this.transaction,
+    required this.paymentTree,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onPay,
+  });
+
+  @override
+  State<_RootTransactionCard> createState() => _RootTransactionCardState();
+}
+
+class _RootTransactionCardState extends State<_RootTransactionCard> {
+  bool _expanded = false;
+
+  Map<String, double> _computeTotals() {
+    double totalSent = 0.0;
+    double totalReceived = 0.0;
+
+    void traverse(List<PaymentNode> nodes) {
+      for (final node in nodes) {
+        final p = node.payment;
+        final isFromNormal =
+            p.fromType == PartyType.normal ||
+            (p.fromType == PartyType.transaction &&
+                Get.find<DashboardController>().transactions.any(
+                  (t) => t.id == p.fromId,
+                ));
+        final isToNormal =
+            p.toType == PartyType.normal ||
+            (p.toType == PartyType.transaction &&
+                Get.find<DashboardController>().transactions.any(
+                  (t) => t.id == p.toId,
+                ));
+
+        if (isFromNormal && !isToNormal) totalSent += p.amount;
+        if (!isFromNormal && isToNormal) totalReceived += p.amount;
+
+        traverse(node.children);
+      }
+    }
+
+    traverse(widget.paymentTree);
+    return {'sent': totalSent, 'received': totalReceived};
+  }
+
+  bool _hasOverdueBranch(List<PaymentNode> nodes) {
+    for (final node in nodes) {
+      final p = node.payment;
+      final isOverdue =
+          p.deadline != null && p.deadline!.isBefore(DateTime.now());
+      if (isOverdue) {
+        final netObligation = Get.find<DashboardController>()
+            .getNetObligationForBranch(p.id);
+        if (netObligation > 0.01) return true;
+      }
+      if (_hasOverdueBranch(node.children)) return true;
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.find<DashboardController>();
+    final hasTree = widget.paymentTree.isNotEmpty;
+    final amountColor = Colors.green.shade600;
+    final totals = _computeTotals();
+    final totalSent = totals['sent']!;
+    final totalReceived = totals['received']!;
+    final netFlow = totalReceived - totalSent;
+    final currentAmount = controller.getCurrentAmount(widget.transaction.id);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1281,483 +1677,119 @@ class _TransactionCardState extends State<_TransactionCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (widget.displayId != null) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: Text(
-                          widget.displayId!,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.grey.shade800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                    Text(
-                      widget.title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.subtitle,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade700,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              if (widget.onPay != null)
-                IconButton(
-                  icon: Icon(
-                    Icons.swap_horiz_rounded,
-                    color: Colors.indigo.shade600,
-                  ),
-                  tooltip: 'Pay / Transfer',
-                  onPressed: widget.onPay,
-                  splashRadius: 20,
-                ),
-              IconButton(
-                icon: Icon(Icons.edit, color: Colors.grey.shade700),
-                onPressed: widget.onEdit,
-                splashRadius: 20,
-              ),
-              IconButton(
-                icon: Icon(Icons.delete, color: Colors.grey.shade700),
-                onPressed: widget.onDelete,
-                splashRadius: 20,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                DateFormat('dd MMM yyyy • hh:mm a').format(widget.date),
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: amountColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: amountColor.withOpacity(0.3)),
-                ),
-                child: Text(
-                  '${widget.isPositive ? '+' : '-'}'
-                  '${controller.selectedCurrency.value.symbol}'
-                  '${widget.amount.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: amountColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (showCurrent) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.indigo.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.indigo.shade100),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.account_balance_wallet_outlined,
-                        size: 14,
-                        color: Colors.indigo.shade700,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Current balance',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.indigo.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    controller.formatAmount(widget.currentAmount!),
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.indigo.shade800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Divider(color: Colors.grey.shade200, height: 1),
-          const SizedBox(height: 8),
-          Text(
-            widget.extraInfo,
-            style: TextStyle(
-              fontSize: 13,
-              color: isOverdue ? Colors.red.shade600 : Colors.grey.shade600,
-              fontWeight: isOverdue ? FontWeight.w600 : FontWeight.normal,
-            ),
-          ),
-          if (hasPayments) ...[
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: () => setState(() => _expanded = !_expanded),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Icon(
-                      _expanded
-                          ? Icons.expand_less_rounded
-                          : Icons.expand_more_rounded,
-                      size: 18,
-                      color: Colors.indigo.shade700,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Linked payments (${linkedPayments.length})',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.indigo.shade700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (_expanded)
-              Column(
-                children: linkedPayments
-                    .map(
-                      (p) =>
-                          _PaymentRow(payment: p, parentId: widget.parentId!),
-                    )
-                    .toList(),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// Single row in the linked-payments expansion. Shows direction relative to
-// the parent transaction so the user instantly knows whether this payment
-// added to or subtracted from the parent's balance.
-class _PaymentRow extends StatelessWidget {
-  const _PaymentRow({required this.payment, required this.parentId});
-
-  final PaymentEntry payment;
-  final String parentId;
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = Get.find<DashboardController>();
-    final isParentIncoming =
-        payment.toType == PartyType.transaction && payment.toId == parentId;
-    final isParentOutgoing =
-        payment.fromType == PartyType.transaction && payment.fromId == parentId;
-    final color = isParentIncoming
-        ? Colors.green.shade700
-        : (isParentOutgoing ? Colors.red.shade700 : Colors.indigo.shade700);
-    final sign = isParentIncoming ? '+' : (isParentOutgoing ? '-' : '');
-    // Color the row background by direction relative to this transaction:
-    //   • parent is "to"  → green tint (cash flowing INTO it)
-    //   • parent is "from"→ red tint (cash flowing OUT of it)
-    //   • parent is neither (chain descendant) → indigo tint (downstream
-    //     activity that doesn't directly move this transaction's balance)
-    final bgColor = isParentIncoming
-        ? Colors.green.shade50
-        : (isParentOutgoing ? Colors.red.shade50 : Colors.indigo.shade50);
-    final borderColor = isParentIncoming
-        ? Colors.green.shade100
-        : (isParentOutgoing ? Colors.red.shade100 : Colors.indigo.shade100);
-
-    return Container(
-      margin: const EdgeInsets.only(top: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (payment.displayId != null) ...[
-                Text(
-                  payment.displayId!,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.grey.shade700,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: Text(
-                  '${payment.fromName} → ${payment.toName}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade800,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Text(
-                '$sign${controller.formatAmount(payment.amount)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-              const SizedBox(width: 4),
-              GestureDetector(
-                onTap: () => _confirmDelete(context, controller, payment.id),
-                child: Icon(
-                  Icons.close_rounded,
-                  size: 16,
-                  color: Colors.grey.shade500,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            '${DateFormat('dd MMM yyyy • hh:mm a').format(payment.date)}'
-            '${payment.paymentMethod != null ? ' • ${payment.paymentMethod}' : ''}'
-            '${payment.description != null && payment.description!.isNotEmpty ? ' • ${payment.description}' : ''}',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmDelete(
-    BuildContext context,
-    DashboardController controller,
-    String id,
-  ) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete Payment'),
-        content: const Text(
-          'Remove this linked payment? The parent transaction\'s balance will recalculate.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: Get.back,
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () {
-              controller.deletePayment(id);
-              Get.back();
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Lightweight envelope used to sort heterogeneous history rows by date
-// before rendering.
-class _HistoryItem {
-  final DateTime date;
-  final Widget widget;
-  _HistoryItem({required this.date, required this.widget});
-}
-
-// Card representation of a standalone PaymentEntry in the main history
-// feed. Shown alongside transaction cards so the user sees a single
-// chronological view of everything that touched the selected party.
-class _PaymentCard extends StatelessWidget {
-  const _PaymentCard({
-    required this.payment,
-    required this.isPositiveFromSelectedPartyPov,
-    required this.onDelete,
-    this.onTap,
-  });
-
-  final PaymentEntry payment;
-  // Drives the amount color and the +/- prefix. True when the selected
-  // filter party received money in this payment, false when it sent.
-  final bool isPositiveFromSelectedPartyPov;
-  final VoidCallback onDelete;
-  // Optional tap handler — typically used to open a detail bottom sheet
-  // for tracing the payment to its source / destination party.
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = Get.find<DashboardController>();
-    final amountColor = isPositiveFromSelectedPartyPov
-        ? Colors.green.shade600
-        : Colors.red.shade600;
-
-    // Strongly differentiate transfer cards from transaction cards. Use a
-    // soft indigo-tinted background and a thicker matching border so the
-    // user can scan the history feed and immediately distinguish a
-    // "Transfer" (PaymentEntry) from a "Transaction" / CompanyTransaction
-    // record.
-    final card = Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Colors.indigo.shade50, Colors.indigo.shade50.withOpacity(0.4)],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.indigo.shade200, width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.indigo.shade100.withOpacity(0.4),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.indigo.shade50,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.swap_horiz_rounded,
-                  size: 18,
-                  color: Colors.indigo.shade700,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
                     Row(
                       children: [
-                        if (payment.displayId != null) ...[
+                        if (widget.transaction.displayId != null) ...[
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.indigo.shade50,
+                              color: Colors.grey.shade100,
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.indigo.shade100),
                             ),
                             child: Text(
-                              payment.displayId!,
-                              style: TextStyle(
+                              widget.transaction.displayId!,
+                              style: const TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.indigo.shade800,
-                                letterSpacing: 0.5,
                               ),
                             ),
                           ),
                           const SizedBox(width: 6),
                         ],
-                        Text(
-                          'Transfer',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.indigo.shade700,
-                            letterSpacing: 0.4,
+                        if (_hasOverdueBranch(widget.paymentTree))
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade100,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.warning_amber_rounded,
+                                  size: 12,
+                                  color: Colors.red,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Overdue',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
                       ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.transaction.description ?? 'Cash Received',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${payment.fromName} → ${payment.toName}',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
+                      widget.transaction.source ?? 'No source',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
               IconButton(
+                icon: Icon(
+                  Icons.swap_horiz_rounded,
+                  color: Colors.indigo.shade600,
+                ),
+                onPressed: widget.onPay,
+                tooltip: 'Pay / Transfer',
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.account_tree_rounded,
+                  color: Colors.green.shade700,
+                ),
+                onPressed: () => Get.to(
+                  () => PaymentChainScreen(
+                    rootTransaction: widget.transaction,
+                    paymentTree: widget.paymentTree,
+                  ),
+                ),
+                tooltip: 'View full chain',
+              ),
+              IconButton(
+                icon: Icon(Icons.edit, color: Colors.grey.shade700),
+                onPressed: widget.onEdit,
+              ),
+              IconButton(
                 icon: Icon(Icons.delete, color: Colors.grey.shade700),
-                onPressed: onDelete,
-                splashRadius: 20,
+                onPressed: widget.onDelete,
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                DateFormat('dd MMM yyyy • hh:mm a').format(payment.date),
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w500,
-                ),
+                DateFormat(
+                  'dd MMM yyyy • hh:mm a',
+                ).format(widget.transaction.date),
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -1770,8 +1802,7 @@ class _PaymentCard extends StatelessWidget {
                   border: Border.all(color: amountColor.withOpacity(0.3)),
                 ),
                 child: Text(
-                  '${isPositiveFromSelectedPartyPov ? '+' : '-'}'
-                  '${controller.formatAmount(payment.amount)}',
+                  '+${controller.formatAmount(widget.transaction.amount)}',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -1781,44 +1812,500 @@ class _PaymentCard extends StatelessWidget {
               ),
             ],
           ),
-          if ((payment.paymentMethod != null &&
-                  payment.paymentMethod!.isNotEmpty) ||
-              (payment.description != null &&
-                  payment.description!.isNotEmpty)) ...[
-            const SizedBox(height: 10),
-            Divider(color: Colors.grey.shade200, height: 1),
-            const SizedBox(height: 8),
-            Text(
-              _buildSubLine(),
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade200),
             ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _statChip('Total Sent', totalSent, Colors.red.shade600),
+                    _statChip(
+                      'Total Received',
+                      totalReceived,
+                      Colors.green.shade600,
+                    ),
+                    _statChip(
+                      'Net Flow',
+                      netFlow,
+                      netFlow >= 0
+                          ? Colors.green.shade600
+                          : Colors.red.shade600,
+                      prefix: netFlow >= 0 ? '+' : '',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.account_balance_wallet,
+                      size: 16,
+                      color: Colors.indigo,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Current balance: ${controller.formatAmount(currentAmount)}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.indigo,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // New: per‑company breakdown
+          if (controller
+              .getNetOwedPerCompanyFromRoot(widget.transaction.id)
+              .isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Divider(color: Colors.grey),
+            const SizedBox(height: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Amounts owed to you:',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: controller
+                      .getNetOwedPerCompanyFromRoot(widget.transaction.id)
+                      .entries
+                      .map((entry) {
+                        final company = controller.companies.firstWhereOrNull(
+                          (c) => c.id == entry.key,
+                        );
+                        final companyName = company?.name ?? entry.key;
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade100,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(
+                            '$companyName: ${controller.formatAmount(entry.value)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        );
+                      })
+                      .toList(),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 12),
+          Divider(color: Colors.grey.shade200),
+          const SizedBox(height: 8),
+          Text(
+            'Cash: ${widget.transaction.isCash ? 'Yes' : 'No'} • Ref: ${widget.transaction.referenceNumber ?? 'N/A'}',
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+          ),
+          if (hasTree) ...[
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Row(
+                children: [
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 18,
+                    color: Colors.indigo.shade700,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Payment tree (${_countNodes(widget.paymentTree)})',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.indigo.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_expanded)
+              _PaymentTreeViewWithActions(
+                nodes: widget.paymentTree,
+                depth: 0,
+                rootTransactionId: widget.transaction.id,
+              ),
           ],
         ],
       ),
     );
+  }
 
-    // Wrap in an InkWell so the whole card is tappable when an onTap is
-    // provided. Use Material so the ripple stays inside the rounded
-    // rectangle.
-    if (onTap == null) return card;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: card,
+  Widget _statChip(
+    String label,
+    double value,
+    Color color, {
+    String prefix = '',
+  }) {
+    final controller = Get.find<DashboardController>();
+    return Column(
+      children: [
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            '$prefix${controller.formatAmount(value)}',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  int _countNodes(List<PaymentNode> nodes) {
+    int count = nodes.length;
+    for (final n in nodes) count += _countNodes(n.children);
+    return count;
+  }
+}
+
+// ================= TAPPABLE PAYMENT NODE (with deadline) =================
+class _TappablePaymentNode extends StatelessWidget {
+  final PaymentNode node;
+  final int depth;
+  final String rootTransactionId;
+
+  const _TappablePaymentNode({
+    required this.node,
+    required this.depth,
+    required this.rootTransactionId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.find<DashboardController>();
+    final payment = node.payment;
+    final isOverdue =
+        payment.deadline != null && payment.deadline!.isBefore(DateTime.now());
+    final netObligation = controller.getNetObligationForBranch(payment.id);
+    final showDueBadge = isOverdue && netObligation > 0.01;
+
+    Color cardColor = Colors.white;
+    if (showDueBadge) cardColor = Colors.red.shade50;
+
+    return Container(
+      margin: EdgeInsets.only(left: depth * 16.0, top: 8),
+      child: Material(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: () => _showPaymentDetails(context, payment),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: showDueBadge
+                    ? Colors.red.shade300
+                    : Colors.grey.shade200,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.subdirectory_arrow_right,
+                      size: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${payment.fromName} → ${payment.toName}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      controller.formatAmount(payment.amount),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      DateFormat('dd MMM yyyy').format(payment.date),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    if (showDueBadge)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              size: 12,
+                              color: Colors.red,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'Due',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.red,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  String _buildSubLine() {
-    final parts = <String>[];
-    if (payment.paymentMethod != null && payment.paymentMethod!.isNotEmpty) {
-      parts.add(payment.paymentMethod!);
-    }
-    if (payment.description != null && payment.description!.isNotEmpty) {
-      parts.add(payment.description!);
-    }
-    return parts.join(' • ');
+  void _showPaymentDetails(BuildContext context, PaymentEntry payment) {
+    final controller = Get.find<DashboardController>();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      payment.displayId ?? 'Transfer',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Get.back(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _detailRow('From', payment.fromName),
+                _detailRow('To', payment.toName),
+                _detailRow('Amount', controller.formatAmount(payment.amount)),
+                _detailRow(
+                  'Date',
+                  DateFormat('dd MMM yyyy • hh:mm a').format(payment.date),
+                ),
+                if (payment.deadline != null)
+                  _detailRow(
+                    'Deadline',
+                    DateFormat('dd MMM yyyy').format(payment.deadline!),
+                  ),
+                if (payment.description != null &&
+                    payment.description!.isNotEmpty)
+                  _detailRow('Description', payment.description!),
+                if (payment.paymentMethod != null &&
+                    payment.paymentMethod!.isNotEmpty)
+                  _detailRow('Method', payment.paymentMethod!),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Get.back();
+                          showDialog(
+                            context: context,
+                            builder: (_) =>
+                                AddPaymentDialog(paymentToEdit: payment),
+                          );
+                        },
+                        icon: const Icon(Icons.edit, size: 18),
+                        label: const Text('Edit'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Get.back();
+                          _confirmDelete(context, payment);
+                        },
+                        icon: const Icon(Icons.delete, size: 18),
+                        label: const Text('Delete'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, PaymentEntry payment) {
+    final controller = Get.find<DashboardController>();
+    Get.dialog(
+      AlertDialog(
+        title: const Text('Delete Payment'),
+        content: Text(
+          'Delete ${payment.displayId ?? 'this payment'}? This may affect chain balances.',
+        ),
+        actions: [
+          TextButton(onPressed: Get.back, child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              controller.deletePayment(payment.id);
+              Get.back();
+              Get.back(); // close bottom sheet if open
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ================= TREE VIEW WITH ACTIONS (scrollable) =================
+class _PaymentTreeViewWithActions extends StatelessWidget {
+  final List<PaymentNode> nodes;
+  final int depth;
+  final String rootTransactionId;
+
+  const _PaymentTreeViewWithActions({
+    required this.nodes,
+    required this.depth,
+    required this.rootTransactionId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: Get.height * 0.5),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: nodes.map((node) => _buildNode(node)).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNode(PaymentNode node) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _TappablePaymentNode(
+          node: node,
+          depth: depth,
+          rootTransactionId: rootTransactionId,
+        ),
+        if (node.children.isNotEmpty)
+          _PaymentTreeViewWithActions(
+            nodes: node.children,
+            depth: depth + 1,
+            rootTransactionId: rootTransactionId,
+          ),
+      ],
+    );
+  }
+}
+
+// Helper class for date sorting
+class _HistoryItem {
+  final DateTime date;
+  final Widget widget;
+  _HistoryItem({required this.date, required this.widget});
 }

@@ -1,71 +1,52 @@
 import 'package:hive/hive.dart';
 
-// PartyType enum - the kind of party involved in a payment movement.
-// `normal`      => personal/cash (you)
-// `company`     => a saved Company / partner
-// `transaction` => an existing Transaction or CompanyTransaction record
-//                  (used when posting a payment against / from another txn)
 enum PartyType { normal, company, transaction }
 
-// PartyTypeAdapter
 class PartyTypeAdapter extends TypeAdapter<PartyType> {
   @override
   final int typeId = 5;
-
   @override
   PartyType read(BinaryReader reader) {
     final idx = reader.readByte();
-    if (idx < 0 || idx >= PartyType.values.length) {
-      return PartyType.normal;
-    }
-    return PartyType.values[idx];
+    return idx >= 0 && idx < PartyType.values.length
+        ? PartyType.values[idx]
+        : PartyType.normal;
   }
 
   @override
-  void write(BinaryWriter writer, PartyType obj) {
-    writer.writeByte(obj.index);
-  }
+  void write(BinaryWriter writer, PartyType obj) => writer.writeByte(obj.index);
 }
 
-// PaymentEntryAdapter
 class PaymentEntryAdapter extends TypeAdapter<PaymentEntry> {
   @override
   final int typeId = 6;
-
   @override
   PaymentEntry read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{};
-
     for (int i = 0; i < numOfFields; i++) {
       final key = reader.readByte();
       final value = reader.read();
       fields[key] = value;
     }
-
-    // Defensive reads — tolerate schema drift without crashing.
     return PaymentEntry(
-      id: _asString(fields[0]) ?? '',
-      displayId: _asString(fields[1]),
+      id: fields[0] as String,
+      displayId: fields[1] as String?,
       fromType: _asPartyType(fields[2]),
-      fromId: _asString(fields[3]),
-      fromName: _asString(fields[4]) ?? '',
+      fromId: fields[3] as String?,
+      fromName: fields[4] as String,
       toType: _asPartyType(fields[5]),
-      toId: _asString(fields[6]),
-      toName: _asString(fields[7]) ?? '',
+      toId: fields[6] as String?,
+      toName: fields[7] as String,
       amount: _asDouble(fields[8]),
       date: _parseDate(fields[9]) ?? DateTime.now(),
-      description: _asString(fields[10]),
-      paymentMethod: _asString(fields[11]),
-      parentRefId: _asString(fields[12]),
-      // Field 13 (added later — older records read null which is fine).
-      // Links this payment to another payment it was sourced from, so the
-      // ledger can model linked-list / chained transfers.
-      sourcePaymentId: _asString(fields[13]),
+      description: fields[10] as String?,
+      paymentMethod: fields[11] as String?,
+      parentRefId: fields[12] as String?,
+      sourcePaymentId: fields[13] as String?,
+      deadline: _parseDate(fields[14]),
     );
   }
-
-  static String? _asString(dynamic v) => v is String ? v : null;
 
   static double _asDouble(dynamic v) {
     if (v is num) return v.toDouble();
@@ -85,16 +66,15 @@ class PaymentEntryAdapter extends TypeAdapter<PaymentEntry> {
   }
 
   static PartyType _asPartyType(dynamic v) {
-    if (v is int && v >= 0 && v < PartyType.values.length) {
+    if (v is int && v >= 0 && v < PartyType.values.length)
       return PartyType.values[v];
-    }
     return PartyType.normal;
   }
 
   @override
   void write(BinaryWriter writer, PaymentEntry obj) {
     writer
-      ..writeByte(14)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -122,28 +102,15 @@ class PaymentEntryAdapter extends TypeAdapter<PaymentEntry> {
       ..writeByte(12)
       ..write(obj.parentRefId)
       ..writeByte(13)
-      ..write(obj.sourcePaymentId);
+      ..write(obj.sourcePaymentId)
+      ..writeByte(14)
+      ..write(obj.deadline?.toIso8601String());
   }
 }
 
-// PaymentEntry model class
-//
-// Represents a single money movement between two parties. Use this as the
-// authoritative history record for tracking who sent what to whom and when.
-//
-// - `parentRefId` (optional) links this payment to a parent transaction or
-//   company-transaction record. When set, the parent's "current amount" is
-//   the original amount adjusted by all payments referencing it.
-// - `sourcePaymentId` (optional) links this payment to ANOTHER PaymentEntry
-//   it was sourced from. This builds a linked-list / chain so the user can
-//   record "from this ₹30 transfer, I sent ₹15 onward to company B" and
-//   trace the full route money took.
-// - `fromId` / `toId` hold the relevant entity id when the party is a
-//   `company` (companyId) or a `transaction` (txn id). For `normal`, leave
-//   the id null.
 class PaymentEntry {
   final String id;
-  final String? displayId; // e.g. PAY-0001
+  final String? displayId;
   final PartyType fromType;
   final String? fromId;
   final String fromName;
@@ -156,6 +123,7 @@ class PaymentEntry {
   final String? paymentMethod;
   final String? parentRefId;
   final String? sourcePaymentId;
+  final DateTime? deadline; // new
 
   PaymentEntry({
     required this.id,
@@ -172,57 +140,44 @@ class PaymentEntry {
     this.paymentMethod,
     this.parentRefId,
     this.sourcePaymentId,
+    this.deadline,
   });
 
-  // Convenience: returns true if `entityId` is involved on the "from" side.
-  bool isFrom({required PartyType type, String? id}) {
-    if (type != fromType) return false;
-    if (type == PartyType.normal) return true; // normal has no id
-    return fromId == id;
-  }
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'displayId': displayId,
+    'fromType': fromType.index,
+    'fromId': fromId,
+    'fromName': fromName,
+    'toType': toType.index,
+    'toId': toId,
+    'toName': toName,
+    'amount': amount,
+    'date': date.toIso8601String(),
+    'description': description,
+    'paymentMethod': paymentMethod,
+    'parentRefId': parentRefId,
+    'sourcePaymentId': sourcePaymentId,
+    'deadline': deadline?.toIso8601String(),
+  };
 
-  // Convenience: returns true if `entityId` is involved on the "to" side.
-  bool isTo({required PartyType type, String? id}) {
-    if (type != toType) return false;
-    if (type == PartyType.normal) return true;
-    return toId == id;
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'displayId': displayId,
-      'fromType': fromType.index,
-      'fromId': fromId,
-      'fromName': fromName,
-      'toType': toType.index,
-      'toId': toId,
-      'toName': toName,
-      'amount': amount,
-      'date': date.toIso8601String(),
-      'description': description,
-      'paymentMethod': paymentMethod,
-      'parentRefId': parentRefId,
-      'sourcePaymentId': sourcePaymentId,
-    };
-  }
-
-  factory PaymentEntry.fromJson(Map<String, dynamic> json) {
-    return PaymentEntry(
-      id: json['id'],
-      displayId: json['displayId'],
-      fromType: PartyType.values[json['fromType'] as int],
-      fromId: json['fromId'],
-      fromName: json['fromName'] ?? '',
-      toType: PartyType.values[json['toType'] as int],
-      toId: json['toId'],
-      toName: json['toName'] ?? '',
-      amount: (json['amount'] as num).toDouble(),
-      date: DateTime.parse(json['date']),
-      description: json['description'],
-      paymentMethod: json['paymentMethod'],
-      parentRefId: json['parentRefId'],
-      sourcePaymentId: json['sourcePaymentId'],
-    );
-  }
+  factory PaymentEntry.fromJson(Map<String, dynamic> json) => PaymentEntry(
+    id: json['id'],
+    displayId: json['displayId'],
+    fromType: PartyType.values[json['fromType'] as int],
+    fromId: json['fromId'],
+    fromName: json['fromName'] ?? '',
+    toType: PartyType.values[json['toType'] as int],
+    toId: json['toId'],
+    toName: json['toName'] ?? '',
+    amount: (json['amount'] as num).toDouble(),
+    date: DateTime.parse(json['date']),
+    description: json['description'],
+    paymentMethod: json['paymentMethod'],
+    parentRefId: json['parentRefId'],
+    sourcePaymentId: json['sourcePaymentId'],
+    deadline: json['deadline'] != null
+        ? DateTime.parse(json['deadline'])
+        : null,
+  );
 }

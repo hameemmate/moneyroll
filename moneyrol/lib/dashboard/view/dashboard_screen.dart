@@ -650,63 +650,63 @@ class DashboardScreen extends StatelessWidget {
                     );
                   },
                 ),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppConstants.incomeColor.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.download,
-                      color: AppConstants.incomeColor,
-                    ),
-                  ),
-                  title: Text(
-                    'Received from Partners',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: AppConstants.textPrimary,
-                    ),
-                  ),
-                  subtitle: Text('Add money received from a Partner'),
-                  onTap: () {
-                    Get.back();
-                    showDialog(
-                      context: context,
-                      builder: (context) => AddCompanyTransactionDialog(
-                        type: TransactionType.received,
-                      ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppConstants.expenseColor.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.upload, color: AppConstants.expenseColor),
-                  ),
-                  title: Text(
-                    'Sent to Partners',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: AppConstants.textPrimary,
-                    ),
-                  ),
-                  subtitle: Text('Add money sent to a Partner'),
-                  onTap: () {
-                    Get.back();
-                    showDialog(
-                      context: context,
-                      builder: (context) => AddCompanyTransactionDialog(
-                        type: TransactionType.sent,
-                      ),
-                    );
-                  },
-                ),
+                // ListTile(
+                //   leading: Container(
+                //     padding: const EdgeInsets.all(8),
+                //     decoration: BoxDecoration(
+                //       color: AppConstants.incomeColor.withOpacity(0.1),
+                //       shape: BoxShape.circle,
+                //     ),
+                //     child: Icon(
+                //       Icons.download,
+                //       color: AppConstants.incomeColor,
+                //     ),
+                //   ),
+                //   title: Text(
+                //     'Received from Partners',
+                //     style: TextStyle(
+                //       fontWeight: FontWeight.w600,
+                //       color: AppConstants.textPrimary,
+                //     ),
+                //   ),
+                //   subtitle: Text('Add money received from a Partner'),
+                //   onTap: () {
+                //     Get.back();
+                //     showDialog(
+                //       context: context,
+                //       builder: (context) => AddCompanyTransactionDialog(
+                //         type: TransactionType.received,
+                //       ),
+                //     );
+                //   },
+                // ),
+                // ListTile(
+                //   leading: Container(
+                //     padding: const EdgeInsets.all(8),
+                //     decoration: BoxDecoration(
+                //       color: AppConstants.expenseColor.withOpacity(0.1),
+                //       shape: BoxShape.circle,
+                //     ),
+                //     child: Icon(Icons.upload, color: AppConstants.expenseColor),
+                //   ),
+                //   title: Text(
+                //     'Sent to Partners',
+                //     style: TextStyle(
+                //       fontWeight: FontWeight.w600,
+                //       color: AppConstants.textPrimary,
+                //     ),
+                //   ),
+                //   subtitle: Text('Add money sent to a Partner'),
+                //   onTap: () {
+                //     Get.back();
+                //     showDialog(
+                //       context: context,
+                //       builder: (context) => AddCompanyTransactionDialog(
+                //         type: TransactionType.sent,
+                //       ),
+                //     );
+                //   },
+                // ),
                 ListTile(
                   leading: Container(
                     padding: const EdgeInsets.all(8),

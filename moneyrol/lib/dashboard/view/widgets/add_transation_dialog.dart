@@ -20,6 +20,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   DateTime selectedDate = DateTime.now();
   TimeOfDay selectedTime = TimeOfDay.now();
   bool isCash = true;
+  // Optional tree-wide deadline. When set, every payment branched off this
+  // transaction inherits it as its effective settlement deadline (unless
+  // the branch overrides with its own deadline). Used for overdue
+  // detection across the whole money tree.
+  DateTime? rootDeadline;
 
   @override
   Widget build(BuildContext context) {
@@ -124,6 +129,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
 
                     // Reference Number (if not cash)
                     if (!isCash) _buildReferenceField(),
+                    if (!isCash) const SizedBox(height: 16),
+
+                    // Tree-wide settlement deadline (optional). Used as the
+                    // default deadline for branches that don't override it.
+                    _buildRootDeadlineField(),
                   ],
                 ),
               ),
@@ -494,6 +504,108 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     );
   }
 
+  // Optional tree-wide deadline picker on the root transaction. Inherited
+  // by every branch payment that doesn't set its own deadline.
+  Widget _buildRootDeadlineField() {
+    final hasDeadline = rootDeadline != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Tree-wide deadline',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppConstants.textPrimary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '(optional)',
+              style: TextStyle(fontSize: 11, color: AppConstants.textSecondary),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate:
+                        rootDeadline ??
+                        DateTime.now().add(const Duration(days: 30)),
+                    firstDate: DateTime.now().subtract(
+                      const Duration(days: 365),
+                    ),
+                    lastDate: DateTime.now().add(
+                      const Duration(days: 365 * 10),
+                    ),
+                  );
+                  if (picked != null) {
+                    setState(() => rootDeadline = picked);
+                  }
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppConstants.borderColor),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          hasDeadline
+                              ? DateFormat('dd MMM yyyy').format(rootDeadline!)
+                              : 'No deadline',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: hasDeadline
+                                ? AppConstants.textPrimary
+                                : AppConstants.textSecondary.withOpacity(0.7),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Icon(
+                        Icons.event_outlined,
+                        size: 18,
+                        color: AppConstants.textSecondary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (hasDeadline) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () => setState(() => rootDeadline = null),
+                icon: Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: AppConstants.textSecondary,
+                ),
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Clear deadline',
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildReferenceField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -604,6 +716,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         referenceNumber: referenceController.text.trim().isEmpty
             ? null
             : referenceController.text.trim(),
+        // deadline: rootDeadline,
       );
 
       Get.back();

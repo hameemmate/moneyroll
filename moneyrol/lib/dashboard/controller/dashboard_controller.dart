@@ -179,25 +179,6 @@ class DashboardController extends GetxController {
     payments.value = _paymentEntryBox.values.toList();
   }
 
-  // Computes the user's net total as the sum of each transaction's CURRENT
-  // amount (so payments linked to a parent automatically adjust the parent's
-  // contribution), plus the net effect of every payment on the "Normal"
-  // (personal/cash) side.
-  //
-  // Worked examples — all net out correctly with this formula:
-  //
-  //   • Txn X (Normal income ₹1000), then payment X → Normal ₹300:
-  //     getCurrentAmount(X) = ₹700; Normal-side: +₹300; total = ₹1000 ✓
-  //
-  //   • Payment Company A → Normal ₹200 (no parent):
-  //     no txn change; Normal-side: +₹200; total += ₹200 ✓
-  //
-  //   • Payment Company A → Company B (no Normal involved):
-  //     no txn change; no Normal-side; total unchanged ✓
-  //
-  //   • Payment Normal → Txn Y (received CT of ₹1000):
-  //     getCurrentAmount(Y) = ₹1200 (Y is "to"); Normal-side: -₹200;
-  //     contribution to total = +₹1200 - ₹200 = +₹1000 ✓
   void _calculateTotalAmount() {
     double total = 0;
 
@@ -438,6 +419,7 @@ class DashboardController extends GetxController {
     String? paymentMethod,
     String? parentRefId,
     String? sourcePaymentId,
+    DateTime? deadline, // new
   }) async {
     final entry = PaymentEntry(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -454,12 +436,12 @@ class DashboardController extends GetxController {
       paymentMethod: paymentMethod,
       parentRefId: parentRefId,
       sourcePaymentId: sourcePaymentId,
+      deadline: deadline, // new
     );
 
     await _paymentEntryBox.put(entry.id, entry);
     payments.add(entry);
     _calculateTotalAmount();
-    // Snackbar shown by caller.
     return entry;
   }
 
@@ -477,6 +459,7 @@ class DashboardController extends GetxController {
     String? paymentMethod,
     String? parentRefId,
     String? sourcePaymentId,
+    DateTime? deadline, // new
   }) async {
     final existing = _paymentEntryBox.get(id);
     if (existing == null) {
@@ -497,14 +480,13 @@ class DashboardController extends GetxController {
       description: description,
       paymentMethod: paymentMethod,
       parentRefId: parentRefId,
-      // Preserve existing chain link if caller didn't override it.
       sourcePaymentId: sourcePaymentId ?? existing.sourcePaymentId,
+      deadline: deadline, // new
     );
     await _paymentEntryBox.put(id, entry);
     final idx = payments.indexWhere((p) => p.id == id);
     if (idx != -1) payments[idx] = entry;
     _calculateTotalAmount();
-    // Snackbar shown by caller.
   }
 
   // ==================== Payment Chain Traversal ====================
@@ -537,14 +519,19 @@ class DashboardController extends GetxController {
 
   /// Direct children: payments that were sourced FROM this one (one hop).
   List<PaymentEntry> getDirectChildren(String paymentId) {
-    final list = payments
-        .where((p) => p.sourcePaymentId == paymentId)
-        .toList();
+    final list = payments.where((p) => p.sourcePaymentId == paymentId).toList();
     list.sort((a, b) => a.date.compareTo(b.date));
     return list;
   }
 
   Future<void> deletePayment(String id) async {
+    // Find all payments that have this payment as source (children)
+    final children = payments.where((p) => p.sourcePaymentId == id).toList();
+    // Recursively delete children first
+    for (final child in children) {
+      await deletePayment(child.id);
+    }
+    // Now delete this payment
     await _paymentEntryBox.delete(id);
     payments.removeWhere((p) => p.id == id);
     _calculateTotalAmount();
@@ -732,8 +719,7 @@ class DashboardController extends GetxController {
       // doesn't appear twice (once nested, once as a top-level card).
       final normalTxnIds = transactions.map((t) => t.id).toSet();
       source = payments.where((p) {
-        if (p.parentRefId != null &&
-            normalTxnIds.contains(p.parentRefId)) {
+        if (p.parentRefId != null && normalTxnIds.contains(p.parentRefId)) {
           return false;
         }
         return p.fromType == PartyType.normal ||
@@ -799,8 +785,7 @@ class DashboardController extends GetxController {
               normalTxnIds.contains(p.fromId));
       bool isToNormalSide(PaymentEntry p) =>
           p.toType == PartyType.normal ||
-          (p.toType == PartyType.transaction &&
-              normalTxnIds.contains(p.toId));
+          (p.toType == PartyType.transaction && normalTxnIds.contains(p.toId));
       final paymentsIntoNormal = payments
           .where((p) => isToNormalSide(p) && !isFromNormalSide(p))
           .fold(0.0, (sum, p) => sum + p.amount);
@@ -854,8 +839,7 @@ class DashboardController extends GetxController {
               normalTxnIds.contains(p.fromId));
       bool isToNormalSide(PaymentEntry p) =>
           p.toType == PartyType.normal ||
-          (p.toType == PartyType.transaction &&
-              normalTxnIds.contains(p.toId));
+          (p.toType == PartyType.transaction && normalTxnIds.contains(p.toId));
       return payments
           .where((p) => isFromNormalSide(p) && !isToNormalSide(p))
           .fold(0.0, (sum, p) => sum + p.amount);
@@ -905,14 +889,17 @@ class DashboardController extends GetxController {
         )
         .fold(0.0, (sum, ct) => sum + ct.amount);
     final normalTxnIds = transactions.map((t) => t.id).toSet();
-    final payIn = payments.where((p) {
-      final fromIsCompany =
-          p.fromType == PartyType.company && p.fromId == companyId;
-      final toIsNormalSide = p.toType == PartyType.normal ||
-          (p.toType == PartyType.transaction &&
-              normalTxnIds.contains(p.toId));
-      return fromIsCompany && toIsNormalSide;
-    }).fold(0.0, (sum, p) => sum + p.amount);
+    final payIn = payments
+        .where((p) {
+          final fromIsCompany =
+              p.fromType == PartyType.company && p.fromId == companyId;
+          final toIsNormalSide =
+              p.toType == PartyType.normal ||
+              (p.toType == PartyType.transaction &&
+                  normalTxnIds.contains(p.toId));
+          return fromIsCompany && toIsNormalSide;
+        })
+        .fold(0.0, (sum, p) => sum + p.amount);
     return base + payIn;
   }
 
@@ -927,14 +914,17 @@ class DashboardController extends GetxController {
         )
         .fold(0.0, (sum, ct) => sum + ct.amount);
     final normalTxnIds = transactions.map((t) => t.id).toSet();
-    final payOut = payments.where((p) {
-      final fromIsNormalSide = p.fromType == PartyType.normal ||
-          (p.fromType == PartyType.transaction &&
-              normalTxnIds.contains(p.fromId));
-      final toIsCompany =
-          p.toType == PartyType.company && p.toId == companyId;
-      return fromIsNormalSide && toIsCompany;
-    }).fold(0.0, (sum, p) => sum + p.amount);
+    final payOut = payments
+        .where((p) {
+          final fromIsNormalSide =
+              p.fromType == PartyType.normal ||
+              (p.fromType == PartyType.transaction &&
+                  normalTxnIds.contains(p.fromId));
+          final toIsCompany =
+              p.toType == PartyType.company && p.toId == companyId;
+          return fromIsNormalSide && toIsCompany;
+        })
+        .fold(0.0, (sum, p) => sum + p.amount);
     return base + payOut;
   }
 
@@ -1262,4 +1252,237 @@ class DashboardController extends GetxController {
 
     _showSuccessSnackbar(message);
   }
+
+  double getNetObligationForTransactionChain(String parentId) {
+    final chain = getPaymentTreeForTransaction(parentId);
+    double net = 0.0;
+    for (final p in chain) {
+      // If money flows into Normal (or a normal Transaction) -> user gains
+      bool intoNormal =
+          (p.toType == PartyType.normal) ||
+          (p.toType == PartyType.transaction &&
+              transactions.any((t) => t.id == p.toId));
+      // If money flows out of Normal -> user loses
+      bool outOfNormal =
+          (p.fromType == PartyType.normal) ||
+          (p.fromType == PartyType.transaction &&
+              transactions.any((t) => t.id == p.fromId));
+
+      if (intoNormal) net += p.amount;
+      if (outOfNormal) net -= p.amount;
+    }
+    return net;
+  }
+
+  // Add these methods inside DashboardController
+
+  // ==================== TREE BUILDING ====================
+
+  /// Checks if the entire chain starting from a payment eventually returns
+  /// all money back to Normal (i.e., net obligation zero).
+  bool isChainCompleted(String paymentId) {
+    final allRelated = getPaymentTreeForTransaction(paymentId);
+    double netToNormal = 0;
+    for (final p in allRelated) {
+      if (p.toType == PartyType.normal) netToNormal += p.amount;
+      if (p.fromType == PartyType.normal) netToNormal -= p.amount;
+    }
+    // Also check the payment itself if it involves Normal
+    final rootPayment = payments.firstWhereOrNull((p) => p.id == paymentId);
+    if (rootPayment != null) {
+      if (rootPayment.toType == PartyType.normal)
+        netToNormal += rootPayment.amount;
+      if (rootPayment.fromType == PartyType.normal)
+        netToNormal -= rootPayment.amount;
+    }
+    return netToNormal.abs() < 0.01;
+  }
+
+  // ==================== TREE BUILDING & ROOT LOOKUP ====================
+
+  /// Returns the full payment tree for a root transaction (Normal or CompanyTransaction)
+  /// as a list of [PaymentNode] objects, each containing a payment and its children.
+  List<PaymentNode> getPaymentTree(String rootId) {
+    final allPayments = payments.toList();
+    final Map<String, List<PaymentEntry>> childrenMap = {};
+
+    // Group payments by sourcePaymentId (the parent payment that funded this one)
+    for (final p in allPayments) {
+      final key = p.sourcePaymentId ?? p.parentRefId ?? '';
+      childrenMap.putIfAbsent(key, () => []).add(p);
+    }
+
+    return _buildTreeNodes(rootId, childrenMap);
+  }
+
+  List<PaymentNode> _buildTreeNodes(
+    String parentId,
+    Map<String, List<PaymentEntry>> childrenMap,
+  ) {
+    final children = childrenMap[parentId] ?? [];
+    final nodes = <PaymentNode>[];
+    for (final p in children) {
+      final node = PaymentNode(
+        payment: p,
+        children: _buildTreeNodes(p.id, childrenMap),
+      );
+      nodes.add(node);
+    }
+    return nodes;
+  }
+
+  double getCompanyNetObligation(String companyId) {
+    double net = 0.0;
+    // Legacy CompanyTransactions
+    for (final ct in companyTransactions.where(
+      (ct) => ct.companyId == companyId,
+    )) {
+      if (ct.type == TransactionType.received)
+        net -= ct.amount;
+      else
+        net += ct.amount;
+    }
+    // Payments belonging to user-originated chains
+    for (final p in payments) {
+      final root = getRootNormalTransaction(p);
+      if (root == null) continue;
+      if (p.toType == PartyType.company && p.toId == companyId) net += p.amount;
+      if (p.fromType == PartyType.company && p.fromId == companyId)
+        net -= p.amount;
+    }
+    return net;
+  }
+
+  Transaction? getRootNormalTransaction(PaymentEntry payment) {
+    String? cursorId = payment.sourcePaymentId ?? payment.parentRefId;
+    while (cursorId != null) {
+      final parentPayment = payments.firstWhereOrNull((p) => p.id == cursorId);
+      if (parentPayment == null) break;
+      cursorId = parentPayment.sourcePaymentId ?? parentPayment.parentRefId;
+    }
+    if (cursorId != null) {
+      return transactions.firstWhereOrNull((t) => t.id == cursorId);
+    }
+    return null;
+  }
+
+  // For a specific company, returns total amount user sent TO this company (including chain payments where user is Normal and company is to side)
+  double getTotalSentToCompany(String companyId) {
+    double total = 0.0;
+    // Legacy CompanyTransactions
+    for (final ct in companyTransactions.where(
+      (ct) => ct.companyId == companyId && ct.type == TransactionType.sent,
+    )) {
+      total += ct.amount;
+    }
+    // Payments where user (Normal or Normal Transaction) sends to this company
+    for (final p in payments) {
+      final root = getRootNormalTransaction(p);
+      if (root == null) continue;
+      final isFromNormal =
+          p.fromType == PartyType.normal ||
+          (p.fromType == PartyType.transaction &&
+              transactions.any((t) => t.id == p.fromId));
+      if (isFromNormal &&
+          p.toType == PartyType.company &&
+          p.toId == companyId) {
+        total += p.amount;
+      }
+    }
+    return total;
+  }
+
+  // For a specific company, returns total amount user received FROM this company (including chain payments where company sends to Normal)
+  double getTotalReceivedFromCompany(String companyId) {
+    double total = 0.0;
+    // Legacy CompanyTransactions
+    for (final ct in companyTransactions.where(
+      (ct) => ct.companyId == companyId && ct.type == TransactionType.received,
+    )) {
+      total += ct.amount;
+    }
+    // Payments where this company sends to user (Normal or Normal Transaction)
+    for (final p in payments) {
+      final root = getRootNormalTransaction(p);
+      if (root == null) continue;
+      final isToNormal =
+          p.toType == PartyType.normal ||
+          (p.toType == PartyType.transaction &&
+              transactions.any((t) => t.id == p.toId));
+      if (p.fromType == PartyType.company &&
+          p.fromId == companyId &&
+          isToNormal) {
+        total += p.amount;
+      }
+    }
+    return total;
+  }
+
+  /// For a specific root transaction (Normal), returns a map of companyId -> net amount owed to user
+  Map<String, double> getNetOwedPerCompanyFromRoot(String rootTransactionId) {
+    final Map<String, double> result = {};
+    // Get all payments belonging to this root
+    final tree = getPaymentTree(rootTransactionId);
+    // Flatten all payments from the tree
+    final allPayments = <PaymentEntry>[];
+    void flatten(List<PaymentNode> nodes) {
+      for (final node in nodes) {
+        allPayments.add(node.payment);
+        flatten(node.children);
+      }
+    }
+
+    flatten(tree);
+
+    for (final p in allPayments) {
+      if (p.toType == PartyType.company) {
+        result[p.toId!] = (result[p.toId!] ?? 0) + p.amount;
+      }
+      if (p.fromType == PartyType.company) {
+        result[p.fromId!] = (result[p.fromId!] ?? 0) - p.amount;
+      }
+    }
+    // Remove zero entries
+    result.removeWhere((_, v) => v.abs() < 0.01);
+    return result;
+  }
+
+  double getNetObligationForBranch(String paymentId) {
+    final allRelated = getPaymentTreeForTransaction(paymentId);
+    double net = 0.0;
+    for (final p in allRelated) {
+      if (p.toType == PartyType.normal) net += p.amount;
+      if (p.fromType == PartyType.normal) net -= p.amount;
+    }
+    final p = payments.firstWhereOrNull((p) => p.id == paymentId);
+    if (p != null) {
+      if (p.toType == PartyType.normal) net += p.amount;
+      if (p.fromType == PartyType.normal) net -= p.amount;
+    }
+    return net;
+  }
+
+  double getNetOwedFromBranch(String paymentId, String companyId) {
+    final tree = getPaymentTree(paymentId);
+    double net = 0.0;
+    void traverse(List<PaymentNode> nodes) {
+      for (final node in nodes) {
+        final p = node.payment;
+        if (p.toType == PartyType.company && p.toId == companyId)
+          net += p.amount;
+        if (p.fromType == PartyType.company && p.fromId == companyId)
+          net -= p.amount;
+        traverse(node.children);
+      }
+    }
+
+    traverse(tree);
+    return net;
+  }
+}
+
+class PaymentNode {
+  final PaymentEntry payment;
+  final List<PaymentNode> children;
+  PaymentNode({required this.payment, required this.children});
 }
